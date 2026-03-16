@@ -1,0 +1,61 @@
+{
+  "name": "@jxrstudios/jxr",
+  "version": "1.2.15",
+  "description": "JXR.js — Edge OS Runtime Framework for elite developers",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "jxr": "./bin/jxr.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "src/",
+    "zzz_react_template/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "javascript",
+    "runtime",
+    "edge",
+    "worker",
+    "jsx",
+    "transform",
+    "virtual-fs",
+    "moq",
+    "crypto"
+  ],
+  "author": "JXR Studios <jxrgameshub@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jxrgameshub/jxr-js.git"
+  },
+  "homepage": "https://jxrstudios.online",
+  "bugs": {
+    "url": "https://github.com/jxrgameshub/jxr-js/issues"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.lib.json && esbuild src/index.ts --platform=browser --packages=external --bundle --format=esm --outdir=dist",
+    "dev": "tsc --watch --project tsconfig.lib.json",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@babel/standalone": "^7.29.1",
+    "nanoid": "^5.1.5"
+  },
+  "devDependencies": {
+    "@types/babel__standalone": "^7.1.9",
+    "@types/node": "^24.7.0",
+    "esbuild": "^0.25.0",
+    "typescript": "5.6.3"
+  }
+}
