@@ -1,6 +1,6 @@
 {
   "name": "@jxrstudios/jxr",
-  "version": "1.2.22",
+  "version": "1.2.23",
   "description": "JXR.js — Edge OS Runtime Framework for elite developers",
   "type": "module",
   "license": "MIT",
@@ -50,12 +50,12 @@
   },
   "dependencies": {
     "@babel/standalone": "^7.29.1",
+    "esbuild": "^0.25.12",
     "nanoid": "^5.1.5"
   },
   "devDependencies": {
     "@types/babel__standalone": "^7.1.9",
     "@types/node": "^24.7.0",
-    "esbuild": "^0.25.12",
     "typescript": "5.6.3"
   }
 }
