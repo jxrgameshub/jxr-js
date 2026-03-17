@@ -44,7 +44,7 @@
     "url": "https://github.com/jxrgameshub/jxr-js/issues"
   },
   "scripts": {
-    "build": "tsc --project tsconfig.lib.json && esbuild src/index.ts --platform=browser --packages=external --bundle --format=esm --outdir=dist",
+    "build": "tsc --project tsconfig.lib.json && esbuild src/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "dev": "tsc --watch --project tsconfig.lib.json",
     "check": "tsc --noEmit"
   },
