@@ -6,7 +6,7 @@
 
 import { readFile, readdir, stat } from "fs/promises";
 import path from "path";
-import { createWriteStream } from "fs";
+import { createWriteStream, existsSync } from "fs";
 import { spawn } from "child_process";
 
 export interface DeployConfig {
@@ -44,6 +44,134 @@ export class JXRDeployer {
   }
 
   /**
+   * Auto-detect build output directory
+   * Checks dist/, build/, out/, or any directory with index.html
+   */
+  async detectBuildDir(projectPath: string = '.'): Promise<string | null> {
+    const possibleDirs = ['dist', 'build', 'out'];
+    
+    // Check standard build directories
+    for (const dir of possibleDirs) {
+      const fullPath = path.resolve(projectPath, dir);
+      if (existsSync(fullPath)) {
+        // Verify it has index.html
+        if (existsSync(path.join(fullPath, 'index.html'))) {
+          return fullPath;
+        }
+      }
+    }
+    
+    // Search for any directory with index.html
+    try {
+      const entries = await readdir(projectPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+          const dirPath = path.join(projectPath, entry.name);
+          if (existsSync(path.join(dirPath, 'index.html'))) {
+            return dirPath;
+          }
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+    
+    return null;
+  }
+
+  /**
+   * Detect if running on Cloudflare Pages
+   */
+  isCloudflarePages(): boolean {
+    return process.env.CF_PAGES === '1' || !!process.env.CF_PAGES_URL;
+  }
+
+  /**
+   * Get project name from package.json or directory
+   */
+  async getProjectName(projectPath: string = '.'): Promise<string> {
+    // Check CF_PAGES_PROJECT_NAME first
+    if (process.env.CF_PAGES_PROJECT_NAME) {
+      return process.env.CF_PAGES_PROJECT_NAME;
+    }
+    
+    // Try to read from package.json
+    try {
+      const pkgPath = path.join(projectPath, 'package.json');
+      const pkgContent = await readFile(pkgPath, 'utf-8');
+      const pkg = JSON.parse(pkgContent);
+      if (pkg.name) {
+        return pkg.name;
+      }
+    } catch {
+      // Ignore errors
+    }
+    
+    // Fall back to directory name
+    return path.basename(path.resolve(projectPath));
+  }
+
+  /**
+   * Deploy to Cloudflare Pages
+   */
+  async deployToCloudflarePages(projectPath: string = '.', config: DeployConfig = {}): Promise<DeployResult> {
+    const logs: string[] = [];
+    
+    try {
+      // Auto-detect build directory
+      const buildDir = await this.detectBuildDir(projectPath);
+      if (!buildDir) {
+        throw new Error('No build output found. Run "jxr build" first.');
+      }
+      logs.push(`📁 Build directory: ${buildDir}`);
+      
+      // Get project name
+      const projectName = await this.getProjectName(projectPath);
+      logs.push(`📦 Project: ${projectName}`);
+      
+      // Check for manifest
+      const manifestPath = path.join(buildDir, 'jxr-manifest.json');
+      if (existsSync(manifestPath)) {
+        const manifest = JSON.parse(await readFile(manifestPath, 'utf-8'));
+        logs.push(`📋 Manifest: ${manifest.platform} platform, ${manifest.files?.length || 0} files`);
+      }
+      
+      // Determine URL
+      const env = config.environment || 'production';
+      const url = `https://${projectName}.app.jxrstudios.online`;
+      logs.push(`🌐 URL: ${url}`);
+      
+      // If running on Cloudflare Pages, the deployment is automatic
+      if (this.isCloudflarePages()) {
+        logs.push('☁️  Cloudflare Pages auto-detected');
+        logs.push('✅ Deployment ready - build output will be deployed automatically');
+        
+        return {
+          success: true,
+          url,
+          deploymentId: `cf-pages-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          logs,
+        };
+      }
+      
+      // Manual deployment via JXR API
+      return await this.deploy(buildDir, { ...config, projectId: projectName });
+      
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      logs.push(`❌ Error: ${errorMsg}`);
+      return {
+        success: false,
+        url: '',
+        deploymentId: '',
+        timestamp: new Date().toISOString(),
+        logs,
+      };
+    }
+  }
+
+  /**
    * Deploy the current project to JXR infrastructure
    */
   async deploy(projectPath: string, config: DeployConfig = {}): Promise<DeployResult> {
@@ -69,7 +197,7 @@ export class JXRDeployer {
       logs.push(`☁️  Uploaded to JXR`);
       
       // Get deployment URL
-      const url = `https://${pid}.jxr.dev`;
+      const url = `https://${pid}.app.jxrstudios.online`;
       logs.push(`🌐 Live at: ${url}`);
       
       return {
