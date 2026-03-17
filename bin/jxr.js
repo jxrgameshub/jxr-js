@@ -206,6 +206,34 @@ if (command === "init") {
   <title>JXR.js — Edge OS Runtime Framework</title>
   <meta name="description" content="JXR.js is the next-generation edge runtime framework for React Native and React. MoQ transport, Web Crypto, Worker pools.">
   
+  <!-- Import Map for External Dependencies -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@19",
+      "react/": "https://esm.sh/react@19/",
+      "react-dom/client": "https://esm.sh/react-dom@19/client",
+      "react-dom/": "https://esm.sh/react-dom@19/",
+      "react/jsx-runtime": "https://esm.sh/react@19/jsx-runtime",
+      "react/jsx-dev-runtime": "https://esm.sh/react@19/jsx-dev-runtime",
+      "wouter": "https://esm.sh/wouter",
+      "lucide-react": "https://esm.sh/lucide-react",
+      "sonner": "https://esm.sh/sonner",
+      "next-themes": "https://esm.sh/next-themes",
+      "framer-motion": "https://esm.sh/framer-motion",
+      "motion-dom": "https://esm.sh/motion-dom",
+      "@radix-ui/react-dialog": "https://esm.sh/@radix-ui/react-dialog",
+      "@radix-ui/react-tooltip": "https://esm.sh/@radix-ui/react-tooltip",
+      "@radix-ui/react-slot": "https://esm.sh/@radix-ui/react-slot",
+      "clsx": "https://esm.sh/clsx",
+      "tailwind-merge": "https://esm.sh/tailwind-merge",
+      "class-variance-authority": "https://esm.sh/class-variance-authority",
+      "tailwindcss": "https://esm.sh/tailwindcss",
+      "tw-animate-css": "https://esm.sh/tw-animate-css"
+    }
+  }
+  </script>
+  
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
