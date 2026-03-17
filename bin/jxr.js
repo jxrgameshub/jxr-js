@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { JXRServerManager, JXRDeployer } from "../src/index.ts";
+import { JXRServerManager, JXRDeployer } from "../dist/index.js";
 
 import { mkdir, writeFile, cp, readdir } from "fs/promises";
 import { existsSync } from "fs";
@@ -275,75 +275,19 @@ if (command === "init") {
   console.log(`🚀 Deploying to ${target === "auto" ? "auto-detected platform" : target}...`);
   
   try {
-    const fs = await import("fs");
-    const path = await import("path");
-    
-    // Auto-detect build output directory
-    let buildDir = path.join(projectPath, "dist");
-    if (!fs.existsSync(buildDir)) {
-      buildDir = path.join(projectPath, "build");
-    }
-    if (!fs.existsSync(buildDir)) {
-      buildDir = path.join(projectPath, "out");
-    }
-    if (!fs.existsSync(buildDir)) {
-      // Look for any directory with index.html
-      const dirs = fs.readdirSync(projectPath, { withFileTypes: true })
-        .filter(d => d.isDirectory() && !d.name.startsWith(".") && !d.name === "node_modules")
-        .map(d => path.join(projectPath, d.name));
+    // Use JXRDeployer for Cloudflare Pages deployment
+    if (target === "cloudflare" || target === "auto") {
+      const deployer = new JXRDeployer(process.env.JXR_API_KEY || '', process.env.JXR_PROJECT_ID);
+      const result = await deployer.deployToCloudflarePages(projectPath, { environment: env });
       
-      for (const dir of dirs) {
-        if (fs.existsSync(path.join(dir, "index.html"))) {
-          buildDir = dir;
-          break;
-        }
-      }
-    }
-    
-    if (!fs.existsSync(buildDir)) {
-      console.error("❌ No build output found. Run 'jxr build' first.");
-      process.exit(1);
-    }
-    
-    // Check for jxr-manifest.json for verification
-    const manifestPath = path.join(buildDir, "jxr-manifest.json");
-    if (fs.existsSync(manifestPath)) {
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-      console.log(`📋 Build manifest: ${manifest.platform} platform`);
-      console.log(`   Files: ${manifest.files.length}`);
-      console.log(`   Signed: ${manifest.algorithm}`);
-    }
-    
-    // Detect if running on Cloudflare Pages
-    const isCloudflarePages = process.env.CF_PAGES === "1" || process.env.CF_PAGES_URL !== undefined;
-    
-    if (target === "cloudflare" || target === "auto" && isCloudflarePages) {
-      console.log("☁️ Deploying to Cloudflare Pages...");
-      
-      // Get project name from package.json or directory
-      let projectName = process.env.CF_PAGES_PROJECT_NAME;
-      if (!projectName) {
-        try {
-          const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, "package.json"), "utf-8"));
-          projectName = pkg.name;
-        } catch {
-          projectName = path.basename(path.resolve(projectPath));
-        }
-      }
-      
-      // On Cloudflare Pages, the build output is automatically deployed
-      // We just need to ensure it's in the right location
-      console.log(`   Project: ${projectName}`);
-      console.log(`   Environment: ${env}`);
-      
-      if (isCloudflarePages) {
-        console.log(`   URL: https://${projectName}.app.jxrstudios.online`);
-        console.log("✅ Deployment ready for Cloudflare Pages");
-        console.log("   The build output will be deployed automatically.");
+      if (result.success) {
+        console.log("✅ Deployed successfully!");
+        console.log(`   URL: ${result.url}`);
+        result.logs.forEach(log => console.log(`   ${log}`));
       } else {
-        // Manual Cloudflare Pages deployment
-        console.log("   Run 'wrangler pages deploy' to deploy manually");
-        console.log("   Or connect your GitHub repo to Cloudflare Pages for auto-deployment");
+        console.error("❌ Deploy failed");
+        result.logs.forEach(log => console.error(`   ${log}`));
+        process.exit(1);
       }
       
     } else if (target === "deno") {
@@ -355,25 +299,9 @@ if (command === "init") {
       console.log("   Copy the dist/ folder to your Node.js server");
       
     } else {
-      // Use JXRDeployer for other platforms
-      if (!process.env.JXR_API_KEY) {
-        console.error("❌ JXR_API_KEY environment variable required");
-        console.error("   Get your key at: https://jxrstudios.online/dashboard");
-        process.exit(1);
-      }
-      
-      const deployer = new JXRDeployer(process.env.JXR_API_KEY, process.env.JXR_PROJECT_ID);
-      const result = await deployer.deploy(buildDir, { environment: env });
-      
-      if (result.success) {
-        console.log("✅ Deployed successfully!");
-        console.log(`   URL: ${result.url}`);
-        result.logs.forEach(log => console.log(`   ${log}`));
-      } else {
-        console.error("❌ Deploy failed");
-        result.logs.forEach(log => console.error(`   ${log}`));
-        process.exit(1);
-      }
+      console.error(`❌ Unknown target: ${target}`);
+      console.error("   Supported: cloudflare, deno, node, auto");
+      process.exit(1);
     }
     
   } catch (err) {
