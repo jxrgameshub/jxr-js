@@ -136,6 +136,7 @@ if (command === "init") {
       chunkNames: "[name]-[hash]",
       assetNames: "[name]-[hash]",
       metafile: true,
+      absWorkingDir: process.cwd(),
       define: {
         "process.env.NODE_ENV": '"production"',
         ...(platform === "cloudflare-worker" && {
@@ -144,7 +145,6 @@ if (command === "init") {
         }),
       },
       external: [
-        // Bundle React to avoid hooks mismatch with external CDN
         ...(platform === "cloudflare-worker" ? ["__STATIC_CONTENT_MANIFEST"] : []),
       ],
       alias: {
@@ -333,6 +333,7 @@ if (command === "init") {
   console.log("  jxr init <project-name>          Create new project");
   console.log("  jxr dev [--port=3000]            Start dev server");
   console.log("  jxr build [--platform=web]       Production build");
+  console.log("  jxr serve [--port=3000]          Serve production build");
   console.log("  jxr deploy [--target=auto]       Deploy to production");
   console.log("");
   console.log("Deploy targets:");
