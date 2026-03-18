@@ -8,8 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](https://opensource.org/licenses/MIT)
 
 **Website:** https://jxrstudios.online  
-**Documentation:** https://jxrstudios.online/docs  
-**Discord:** https://discord.gg/jxr
+**Documentation:** https://jxrstudios.online/docs
 
 ---
 
