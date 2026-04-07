@@ -11,7 +11,6 @@
     "react-native"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace",
     "validate": "./scripts/validate-all.sh"
   },
   "dependencies": {
