@@ -1,12 +1,10 @@
 {
   "name": "jxr-jsx",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "jxr dev",
     "build": "jxr build"
-  },
-  "dependencies": {
-    "@jxrstudios/jxr": "^1.2.0"
   }
 }

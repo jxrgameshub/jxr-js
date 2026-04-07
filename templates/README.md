@@ -1,6 +1,6 @@
 # JXR.js Official Templates
 
-Monorepo of isolated, runnable starter templates for `@jxrstudios/jxr`.
+npm workspaces monorepo — one `npm install`, then run any template.
 
 | Template | Language | Entry |
 |----------|----------|-------|
@@ -10,15 +10,22 @@ Monorepo of isolated, runnable starter templates for `@jxrstudios/jxr`.
 | [tsx](./tsx) | TSX | `src/main.tsx` |
 | [react-native](./react-native) | React Native + TSX | `src/main.tsx` |
 
-## Quick Start
+## Quick Start (in monorepo)
 
 ```bash
-# from repo root
-cp -r templates/tsx my-app
-cd my-app
+cd templates
 npm install
-jxr dev
+cd tsx && jxr dev
 ```
+
+## Standalone Copy
+
+```bash
+./scripts/create-from-template.sh tsx my-app
+cd my-app && npm install && jxr dev
+```
+
+The script inlines shared deps and tsconfig for standalone use.
 
 ## Validate All
 
