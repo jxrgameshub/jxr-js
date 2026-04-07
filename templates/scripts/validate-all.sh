@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 
-for dir in "$ROOT"/templates/*/; do
+for dir in "$ROOT"/*/; do
   [ -f "$dir/package.json" ] || continue
   name="$(basename "$dir")"
   echo "--- validating: $name ---"
