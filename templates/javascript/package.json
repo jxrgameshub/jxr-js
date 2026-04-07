@@ -1,11 +1,10 @@
 {
   "name": "jxr-javascript",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "jxr dev",
-    "build": "jxr build",
-    "deploy": "jxr deploy"
+    "build": "jxr build"
   },
   "dependencies": {
     "@jxrstudios/jxr": "^1.2.0"

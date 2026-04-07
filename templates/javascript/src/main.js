@@ -3,7 +3,6 @@ import { VirtualFS, ImportMapBuilder, jxrCrypto } from '@jxrstudios/jxr';
 // Build a browser-native import map for React
 const importMap = new ImportMapBuilder()
   .addReactDefaults('18')
-  .add('wouter', 'https://esm.sh/wouter@3')
   .build();
 
 console.log('import map:', JSON.stringify(importMap, null, 2));

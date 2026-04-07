@@ -1,8 +1,7 @@
-import { VirtualFS, ModuleCache, jxrCrypto } from '@jxrstudios/jxr';
+import { VirtualFS, jxrCrypto } from '@jxrstudios/jxr';
 import type { VirtualFile, ModuleHash } from '@jxrstudios/jxr';
 
 const vfs = new VirtualFS();
-const cache = new ModuleCache(50);
 
 // Write a module to the virtual file system
 const file: VirtualFile = vfs.write('/src/utils.ts', `

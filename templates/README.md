@@ -13,6 +13,7 @@ Monorepo of isolated, runnable starter templates for `@jxrstudios/jxr`.
 ## Quick Start
 
 ```bash
+# from repo root
 cp -r templates/tsx my-app
 cd my-app
 npm install

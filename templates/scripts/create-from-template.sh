@@ -7,9 +7,11 @@ DEST="${2:?Usage: create-from-template.sh <template-name> <dest>}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMPLATE_DIR="$(dirname "$SCRIPT_DIR")/$TEMPLATE"
 
-if [ ! -d "$TEMPLATE_DIR" ]; then
+if [ ! -d "$TEMPLATE_DIR" ] || [ ! -f "$TEMPLATE_DIR/package.json" ]; then
   echo "Template '$TEMPLATE' not found. Available:"
-  ls "$(dirname "$SCRIPT_DIR")/"
+  for d in "$(dirname "$SCRIPT_DIR")"/*/; do
+    [ -f "$d/package.json" ] && echo "  $(basename "$d")"
+  done
   exit 1
 fi
 
