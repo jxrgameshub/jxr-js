@@ -1,10 +1,8 @@
 # JSX
 
-Plain JSX — MoQ Transport publish/subscribe demo.
+MoQ Transport publish/subscribe chat.
 
 ```bash
-npm install
-jxr dev
+cd templates && npm install
+cd jsx && jxr dev
 ```
-
-Publishes messages to a local MoQ track and displays them in real time.

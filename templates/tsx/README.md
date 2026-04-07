@@ -1,10 +1,8 @@
 # TSX
 
-TypeScript + JSX — live JXRRuntime metrics dashboard.
+Live JXRRuntime metrics dashboard.
 
 ```bash
-npm install
-jxr dev
+cd templates && npm install
+cd tsx && jxr dev
 ```
-
-Displays worker pool throughput, latency, cache size, and uptime in real time.

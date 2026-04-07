@@ -1,20 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$(dirname "$0")/.."
+npm install --silent
 
-# Install all workspace deps once at root
-echo "--- installing workspace deps ---"
-(cd "$ROOT" && npm install --silent)
-echo ""
-
-for dir in "$ROOT"/*/; do
+for dir in */; do
   [ -f "$dir/package.json" ] || continue
-  name="$(basename "$dir")"
-  echo "--- validating: $name ---"
-  (cd "$dir" && npx jxr build 2>&1) || echo "WARN: $name build returned non-zero"
-  echo ""
+  echo "--- $(basename "$dir") ---"
+  (cd "$dir" && npx jxr build) || echo "WARN: build failed"
 done
-
-echo "done."

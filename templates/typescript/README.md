@@ -1,10 +1,8 @@
 # TypeScript
 
-Pure TypeScript — VirtualFS and SHA-256 integrity verification.
+VirtualFS + SHA-256 integrity verification.
 
 ```bash
-npm install
-jxr dev
+cd templates && npm install
+cd typescript && jxr dev
 ```
-
-Writes a module to VirtualFS, hashes it, and verifies integrity.

@@ -1,10 +1,8 @@
 # JavaScript
 
-Plain JavaScript — ImportMapBuilder, VirtualFS, and crypto nonce generation.
+ImportMapBuilder + VirtualFS + crypto nonce.
 
 ```bash
-npm install
-jxr dev
+cd templates && npm install
+cd javascript && jxr dev
 ```
-
-Demonstrates import map construction and in-memory file management.
