@@ -1,0 +1,16 @@
+{
+  "name": "jxr-typescript",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "jxr dev",
+    "build": "jxr build",
+    "deploy": "jxr deploy"
+  },
+  "dependencies": {
+    "@jxrstudios/jxr": "^1.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

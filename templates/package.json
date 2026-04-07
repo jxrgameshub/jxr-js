@@ -1,0 +1,9 @@
+{
+  "name": "jxr-templates",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Official template showcase for @jxrstudios/jxr",
+  "scripts": {
+    "validate": "./scripts/validate-all.sh"
+  }
+}

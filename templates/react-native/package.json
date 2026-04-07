@@ -1,0 +1,18 @@
+{
+  "name": "jxr-react-native",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "jxr dev",
+    "build": "jxr build --platform=native",
+    "deploy": "jxr deploy"
+  },
+  "dependencies": {
+    "@jxrstudios/jxr": "^1.2.0",
+    "react-native": "^0.76.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}
