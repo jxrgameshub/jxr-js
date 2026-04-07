@@ -8,9 +8,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](https://opensource.org/licenses/MIT)
 
 **Website:** https://jxrstudios.online  
-**Documentation:** https://jxrstudios.online/docs
+**Documentation:** https://jxrstudios.online/
 
 ---
+Pro Tip: Just swap in your tsx where the template /src is run ``` jxr dev ``` zero build step needed if it doesnt work update your browser. Enjoy
 
 ## Table of Contents
 
