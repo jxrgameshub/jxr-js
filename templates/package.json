@@ -1,0 +1,19 @@
+{
+  "name": "jxr-templates",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Official template showcase for @jxrstudios/jxr",
+  "workspaces": [
+    "typescript",
+    "javascript",
+    "jsx",
+    "tsx",
+    "react-native"
+  ],
+  "scripts": {
+    "validate": "./scripts/validate-all.sh"
+  },
+  "dependencies": {
+    "@jxrstudios/jxr": "^1.2.0"
+  }
+}
