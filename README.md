@@ -1,4 +1,4 @@
-# JXR.js — Edge OS Runtime Framework
+# JXR.js — Edge OS Web Runtime Framework
 
 > **Execute JavaScript at the edge with zero-build JSX transformation.**
 >
