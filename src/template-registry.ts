@@ -4,7 +4,8 @@
  *
  * Both consumers read from here so they can never drift:
  *   • the CLI (`jxr init --template=<id>`, `jxr init --list`, interactive picker)
- *   • the dev server (`GET /__jxr/templates`, `POST /__jxr/apply-template`)
+ *   • the dev server / Template Explorer (`GET /__jxr/templates`,
+ *     `GET /__jxr/preview/<id>`, `POST /__jxr/apply-template`)
  *
  * Keeping the catalog data-only (no imports, no side effects) means it can be
  * imported from Node ESM (bin/jxr.js via dist) without pulling in the runtime.
@@ -26,18 +27,26 @@ export interface JXRTemplateMeta {
   /** Broad category; `native`/`vanilla` templates are not web-drop-in safe. */
   kind: TemplateKind;
   /**
-   * Whether this template can be live-previewed / dropped into a running web
-   * app by the dev overlay. False for templates that import the Node-side
-   * framework runtime (served from esm.sh with Babel + Node shims) or that
-   * target a non-browser platform — those are still available via
-   * `jxr init --template=<id>`.
+   * Whether the Template Explorer can render this template live in an isolated
+   * sandboxed iframe (`GET /__jxr/preview/<id>`). False for templates that
+   * import the Node-side framework runtime (served from esm.sh with Babel +
+   * Node shims) or that target a non-browser platform — those still get a
+   * source preview and remain available via `jxr init --template=<id>`.
    */
-  browserPreview: boolean;
+  livePreview: boolean;
+  /**
+   * Why a template cannot be live-previewed (surfaced in the source preview so
+   * the developer can still make an informed choice). Omitted when
+   * `livePreview` is true.
+   */
+  previewNote?: string;
+  /** Entry file inside `src/` used to render the live preview. */
+  entry: string;
 }
 
 /**
  * The official catalog. Order here is the order shown everywhere (CLI list,
- * interactive picker, dev overlay, command palette).
+ * interactive picker, Template Explorer, command palette).
  */
 export const JXR_TEMPLATES: JXRTemplateMeta[] = [
   {
@@ -48,7 +57,8 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     tags: ["styled", "command-palette", "radix", "shader", "metal", "aurora", "starter"],
     accent: "#a855f7",
     kind: "web",
-    browserPreview: true,
+    livePreview: true,
+    entry: "src/main.tsx",
   },
   {
     id: "minimal",
@@ -57,7 +67,8 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     tags: ["minimal", "counter", "small", "hello-world"],
     accent: "#ea580c",
     kind: "web",
-    browserPreview: true,
+    livePreview: true,
+    entry: "src/main.tsx",
   },
   {
     id: "dashboard",
@@ -67,7 +78,10 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     tags: ["dashboard", "metrics", "worker-pool", "moq", "runtime"],
     accent: "#f97316",
     kind: "web",
-    browserPreview: false,
+    livePreview: false,
+    previewNote:
+      "Imports the JXR runtime (jxrRuntime) — a Node-side module that esm.sh cannot serve browser-safe. Scaffold with `jxr init --template=dashboard` to run it.",
+    entry: "src/main.tsx",
   },
   {
     id: "crypto-notes",
@@ -77,7 +91,10 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     tags: ["crypto", "encryption", "notes", "virtualfs", "web-crypto"],
     accent: "#22c55e",
     kind: "web",
-    browserPreview: false,
+    livePreview: false,
+    previewNote:
+      "Uses jxrCrypto from the JXR runtime — a Node-side module that esm.sh cannot serve browser-safe. Scaffold with `jxr init --template=crypto-notes`.",
+    entry: "src/main.tsx",
   },
   {
     id: "multi-page",
@@ -86,7 +103,8 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     tags: ["routing", "wouter", "multi-page", "spa"],
     accent: "#06b6d4",
     kind: "web",
-    browserPreview: true,
+    livePreview: true,
+    entry: "src/main.tsx",
   },
   {
     id: "cloudflare-worker",
@@ -96,7 +114,8 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     tags: ["cloudflare", "edge", "worker", "deploy", "wranglerless"],
     accent: "#f59e0b",
     kind: "worker",
-    browserPreview: true,
+    livePreview: true,
+    entry: "src/main.tsx",
   },
   {
     id: "typescript",
@@ -104,8 +123,11 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     description: "Plain TypeScript (no JSX) entry point with strict typing.",
     tags: ["typescript", "ts", "strict"],
     accent: "#3b82f6",
-    kind: "web",
-    browserPreview: false,
+    kind: "vanilla",
+    livePreview: false,
+    previewNote:
+      "Console-only entry (no DOM output) that prints to stdout under Node — run it with `jxr build` + `node`, not in a browser.",
+    entry: "src/main.ts",
   },
   {
     id: "javascript",
@@ -113,8 +135,11 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     description: "Plain JavaScript (no JSX) entry point for the smallest bundle.",
     tags: ["javascript", "js", "plain"],
     accent: "#eab308",
-    kind: "web",
-    browserPreview: false,
+    kind: "vanilla",
+    livePreview: false,
+    previewNote:
+      "Console-only entry (no DOM output) that prints to stdout under Node — run it with `jxr build` + `node`, not in a browser.",
+    entry: "src/main.js",
   },
   {
     id: "jsx",
@@ -123,7 +148,10 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     tags: ["jsx", "react", "javascript"],
     accent: "#8b5cf6",
     kind: "web",
-    browserPreview: false,
+    livePreview: false,
+    previewNote:
+      "The demo component imports MoQTransport from the JXR runtime — a Node-side module esm.sh cannot serve browser-safe.",
+    entry: "src/main.jsx",
   },
   {
     id: "tsx",
@@ -132,7 +160,10 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     tags: ["tsx", "react", "typescript"],
     accent: "#6366f1",
     kind: "web",
-    browserPreview: false,
+    livePreview: false,
+    previewNote:
+      "The demo component imports jxrRuntime from the JXR runtime — a Node-side module esm.sh cannot serve browser-safe.",
+    entry: "src/main.tsx",
   },
   {
     id: "react-native",
@@ -142,7 +173,10 @@ export const JXR_TEMPLATES: JXRTemplateMeta[] = [
     tags: ["react-native", "native", "mobile"],
     accent: "#0ea5e9",
     kind: "native",
-    browserPreview: false,
+    livePreview: false,
+    previewNote:
+      "Targets React Native via AppRegistry — there is no DOM/HTML output to preview in a browser.",
+    entry: "src/main.tsx",
   },
 ];
 
@@ -157,13 +191,13 @@ export function listTemplateIds(): string[] {
 }
 
 /**
- * Templates that can be live-previewed / dropped into a running web project by
- * the dev overlay. Excludes native/non-web targets and templates that import
- * the Node-side framework runtime (which esm.sh serves with Babel + Node shims).
- * Everything remains available via `jxr init --template=<id>`.
+ * Templates the Template Explorer can render live in an isolated iframe.
+ * Excludes native/non-web targets and templates that import the Node-side
+ * framework runtime (which esm.sh serves with Babel + Node shims). Everything
+ * remains available via `jxr init --template=<id>` and the source preview.
  */
 export function listPreviewableTemplates(): JXRTemplateMeta[] {
-  return JXR_TEMPLATES.filter((template) => template.browserPreview);
+  return JXR_TEMPLATES.filter((template) => template.livePreview);
 }
 
 /** Whether an arbitrary string is a known, safe-to-use template id. */

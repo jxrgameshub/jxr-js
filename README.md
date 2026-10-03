@@ -156,12 +156,25 @@ Options:
 - Import map resolution for bare imports (`react`, `react-dom/client`, `wouter`, …)
 - File watching with debounced HMR over Server-Sent Events
 - CSS injected into the document (no stylesheet build step)
-- **Dev template overlay** — a floating gear button (or press `H`) opens a
-  command palette that lists the official templates served live from
-  `GET /__jxr/templates`. Choosing one shows a permanent-choice confirmation and
-  then drops it into `src/` via `POST /__jxr/apply-template` (your current `src/`
-  is backed up to `.jxr/backup-<timestamp>/` first). The overlay is injected by
-  the dev server only and never appears in a `jxr build` output.
+- **Template Explorer** — a floating gear button (or press `H` / `⌘K` / `Ctrl-K`)
+  opens a dev-only explorer whose search sits center-top, a carousel of **every**
+  official template sits beneath it (accent dot, name, tags, kind filter chips and
+  a `Live`/`Source` badge), and a stage previews the selection before you commit:
+
+  - **Live preview** — web-renderable templates render in a sandboxed `<iframe>`
+    served from `GET /__jxr/preview/<id>` (isolated per-template module graph, so
+    your running app is never touched).
+  - **Source preview** — non-web-renderable templates (Node-runtime or native)
+    show a file tree + highlighted source plus a note explaining why they can't be
+    live-rendered, so you can still choose deliberately.
+  - **Apply** from the stage button *or* from the default template's command
+    palette: a permanent-choice confirmation then drops the template into `src/`
+    via `POST /__jxr/apply-template` (your current `src/` is backed up to
+    `.jxr/backup-<timestamp>/` first).
+
+  `GET /__jxr/templates` returns the **full catalog** (all templates, not just the
+  previewable ones). The explorer is injected by the dev server only and never
+  appears in a `jxr build` output.
 
 ### `jxr build`
 

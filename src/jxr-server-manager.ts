@@ -11,9 +11,12 @@ import {
 } from "./index.ts";
 import type { ProjectFile } from "./index.ts";
 import {
-  listPreviewableTemplates,
+  JXR_TEMPLATES,
+  getTemplate,
   isValidTemplateId,
 } from "./template-registry.ts";
+import type { JXRTemplateMeta } from "./template-registry.ts";
+import { buildExplorerScript } from "./template-explorer.ts";
 
 export interface JXRServerConfig {
   port?: number;
@@ -38,6 +41,32 @@ function resolveTemplatesDir(): string {
   return path.join(here, "..", "templates");
 }
 
+/** One file inside a template bundle (path is relative to `src/`). */
+interface TemplateFile {
+  path: string;
+  content: string;
+}
+
+/** A catalog entry returned by `GET /__jxr/templates`. `files` is only
+ * included when the template can be live-previewed (keeps payloads small). */
+interface TemplateCatalogEntry {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  accent: string;
+  kind: JXRTemplateMeta["kind"];
+  livePreview: boolean;
+  previewNote?: string;
+  entry: string;
+  files: TemplateFile[];
+}
+
+/** Escape a string for safe embedding inside a `"…"` JS string literal. */
+function escapeForDoubleQuoted(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
 export class JXRServerManager {
   private runtime: JXRRuntime;
   private transpiler: EnhancedTranspiler;
@@ -49,9 +78,7 @@ export class JXRServerManager {
   private debounceTimer: NodeJS.Timeout | null = null;
   private pendingChanges: Map<string, ProjectFile> = new Map();
   private clients: Set<http.ServerResponse> = new Set();
-  private templateCache:
-    | Array<{ meta: unknown; files: Array<{ path: string; content: string }> }>
-    | null = null;
+  private templateCache: TemplateCatalogEntry[] | null = null;
 
   constructor(config: JXRServerConfig = {}) {
     this.config = {
@@ -172,26 +199,113 @@ export class JXRServerManager {
   }
 
   /**
-   * Read every previewable template's `src/` from the bundled `templates/`
-   * directory into an in-memory `{ path: content }` bundle. Only runs when the
-   * template endpoint is first hit (the dev overlay opens), so it stays off the
-   * hot path.
+   * Build the FULL template catalog (all templates, not just previewable ones)
+   * so the Template Explorer can list every option. Source files are bundled
+   * inline only for live-previewable templates (keeps the payload small). Runs
+   * once, lazily, on first hit of the template endpoint, then caches.
    */
-  private async buildTemplateBundles(): Promise<
-    Array<{ meta: unknown; files: Array<{ path: string; content: string }> }>
-  > {
+  private async buildTemplateCatalog(): Promise<TemplateCatalogEntry[]> {
     if (this.templateCache) return this.templateCache;
     const templatesDir = resolveTemplatesDir();
-    const bundles: Array<{ meta: unknown; files: Array<{ path: string; content: string }> }> = [];
-    for (const meta of listPreviewableTemplates()) {
+    const catalog: TemplateCatalogEntry[] = [];
+    for (const meta of JXR_TEMPLATES) {
+      // Always bundle source: live previews need it to transpile, and every
+      // other template uses it for the source (file tree + code) preview.
       const srcDir = path.join(templatesDir, meta.id, "src");
       const files = await this.readDirectoryFiles(srcDir, srcDir);
-      if (files.length > 0) {
-        bundles.push({ meta, files });
-      }
+      catalog.push({
+        id: meta.id,
+        name: meta.name,
+        description: meta.description,
+        tags: meta.tags,
+        accent: meta.accent,
+        kind: meta.kind,
+        livePreview: meta.livePreview,
+        previewNote: meta.previewNote,
+        entry: meta.entry,
+        files,
+      });
     }
-    this.templateCache = bundles;
-    return bundles;
+    this.templateCache = catalog;
+    return catalog;
+  }
+
+  /**
+   * Rewrite a transpiled template module's imports/exports so it can be served
+   * from the isolated `/__jxr/preview/` namespace. The bundled transpiler
+   * rewrites relative + `@/` imports to project-root-absolute paths (`/src/…`,
+   * without extension); here we (1) prefix every `/src/` reference with the
+   * preview base and (2) append the extension the preview resolver expects.
+   * Bare specifiers (react, wouter, …) are left untouched for the import map.
+   */
+  private rewritePreviewCode(code: string, base: string): string {
+    return code.replace(
+      /(["'])\/src\/([^"']+)\1/g,
+      (match: string, quote: string, rest: string) => {
+        const hasExt = /\.(tsx?|jsx?|css)$/.test(rest);
+        return `${quote}${base}/src/${rest}${hasExt ? "" : ".tsx"}${quote}`;
+      }
+    );
+  }
+
+  /**
+   * Resolve a requested preview module path to its actual extension within a
+   * template bundle. Order mirrors how the explorer lists files so that
+   * extensionless imports resolve deterministically.
+   */
+  private resolvePreviewModule(
+    files: TemplateFile[],
+    modulePath: string
+  ): TemplateFile | undefined {
+    const exact = files.find((f) => f.path === modulePath);
+    if (exact) return exact;
+    const extOrder = [".tsx", ".ts", ".jsx", ".js", ".css"];
+    // The transpiler strips the original extension and rewritePreviewCode
+    // re-adds ".tsx", so the requested path may carry a wrong extension
+    // (e.g. lib/utils.tsx when the file is lib/utils.ts). Try both the raw
+    // path and its extension-stripped base against every known extension.
+    const base = modulePath.replace(/\.(tsx?|jsx?|css)$/, "");
+    for (const ext of extOrder) {
+      const candidate =
+        files.find((f) => f.path === base + ext) ??
+        files.find((f) => f.path === modulePath + ext);
+      if (candidate) return candidate;
+    }
+    return undefined;
+  }
+
+  /**
+   * Self-contained HTML document for a live template preview. Rendered inside a
+   * sandboxed iframe by the Template Explorer — never part of the running app.
+   */
+  private generatePreviewHTML(
+    meta: JXRTemplateMeta,
+    files: TemplateFile[],
+    previewBase: string
+  ): string {
+    const importMap = buildImportMap();
+    // `entry` is stored relative to src/ (e.g. "src/main.tsx"); strip the src/
+    // prefix so it can be appended to the preview base.
+    const entryPath = meta.entry.replace(/^src\//, "");
+    const stylesheet = files.some((f) => f.path === "src/styles.css")
+      ? `\n  <link rel="stylesheet" href="${previewBase}/src/styles.css">`
+      : "";
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JXR preview — ${meta.name}</title>
+  <style>html,body{margin:0;min-height:100%}#root{min-height:100vh}</style>${stylesheet}
+  <script type="importmap">
+    ${JSON.stringify(importMap)}
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="${previewBase}/src/${entryPath}"></script>
+</body>
+</html>`;
   }
 
   /**
@@ -397,21 +511,95 @@ export class JXRServerManager {
         return;
       }
 
-      // Template catalog for the dev overlay / command palette. Returns only
-      // previewable (web-renderable) templates with their source bundled inline
-      // so the client can drop them in without extra requests.
+      // Full template catalog for the Template Explorer / command palette.
+      // Every template is listed; live-previewable ones also carry their source
+      // files inline so the explorer can serve a sandboxed preview.
       if (url.pathname === "/__jxr/templates" && req.method === "GET") {
         try {
-          const bundles = await this.buildTemplateBundles();
+          const templates = await this.buildTemplateCatalog();
           res.writeHead(200, {
             "Content-Type": "application/json",
             "Cache-Control": "no-cache",
           });
-          res.end(JSON.stringify({ templates: bundles }));
+          res.end(JSON.stringify({ templates }));
         } catch (err: any) {
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: err?.message || String(err) }));
         }
+        return;
+      }
+
+      // Sandboxed live preview of a single template. The HTML/doc lives at
+      // /__jxr/preview/<id>; its modules at /__jxr/preview/<id>/src/<file>.
+      if (url.pathname.startsWith("/__jxr/preview/") && req.method === "GET") {
+        const rest = url.pathname.slice("/__jxr/preview/".length);
+        const segments = rest.split("/").filter(Boolean);
+        const id = segments[0] ? decodeURIComponent(segments[0]) : "";
+        const moduleParts = segments.slice(1).map(decodeURIComponent);
+
+        const meta = id ? getTemplate(id) : undefined;
+        if (!meta) {
+          res.writeHead(404, { "Content-Type": "text/plain" });
+          res.end(`// Unknown template: ${id}`);
+          return;
+        }
+        if (!meta.livePreview) {
+          res.writeHead(409, { "Content-Type": "text/plain" });
+          res.end(
+            `// "${meta.id}" cannot be live-previewed: ${
+              meta.previewNote ?? "not a web drop-in template."
+            }`
+          );
+          return;
+        }
+
+        const catalog = await this.buildTemplateCatalog();
+        const entry = catalog.find((t) => t.id === meta.id);
+        const files = entry?.files ?? [];
+        const previewBase = `/__jxr/preview/${meta.id}`;
+
+        // Document root → the preview HTML.
+        if (moduleParts.length === 0) {
+          res.writeHead(200, { "Content-Type": "text/html", "Cache-Control": "no-cache" });
+          res.end(this.generatePreviewHTML(meta, files, previewBase));
+          return;
+        }
+
+        // URLs are /__jxr/preview/<id>/src/<file>; bundle paths are relative to
+        // the template's src/, so drop the leading "src/" before resolving.
+        const modulePath = moduleParts.join("/").replace(/^src\//, "");
+        const file = this.resolvePreviewModule(files, modulePath);
+        if (!file) {
+          res.writeHead(404, { "Content-Type": "text/plain" });
+          res.end(`// Preview module not found: ${modulePath}`);
+          return;
+        }
+
+        // CSS → a JS module that injects a <style> tag (mirrors the app server).
+        if (file.path.endsWith(".css")) {
+          const escaped = file.content
+            .replace(/\\/g, "\\\\")
+            .replace(/`/g, "\\`")
+            .replace(/\$/g, "\\$");
+          res.writeHead(200, { "Content-Type": "application/javascript", "Cache-Control": "no-cache" });
+          res.end(
+            `const s=document.createElement('style');s.textContent=\`${escaped}\`;document.head.appendChild(s);export default \`${escaped}\`;`
+          );
+          return;
+        }
+
+        // TS/JS/JSX/TSX → transpile then rewrite into the preview namespace.
+        // Pass a src/-prefixed filename so the transpiler's import rewriter
+        // (which mirrors the app server) emits project-root-absolute "/src/…"
+        // specifiers that rewritePreviewCode can then re-base.
+        const result = this.transpiler.transpileTypeScript(file.content, "src/" + file.path);
+        if (result.error) {
+          res.writeHead(500, { "Content-Type": "text/plain" });
+          res.end(`// Preview transform error: ${result.error.message}`);
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "application/javascript", "Cache-Control": "no-cache" });
+        res.end(this.rewritePreviewCode(result.code, previewBase));
         return;
       }
 
@@ -619,225 +807,6 @@ export default \`${escapedCSS}\`;
     console.log("👋 JXR server stopped");
   }
 
-  /**
-   * Dev-only overlay: a floating gear button that opens a template command
-   * palette (search → confirm → apply) plus a couple of tools. Injected only by
-   * the dev server, so it never appears in a `jxr build` production bundle.
-   *
-   * The markup is rendered inside a Shadow DOM so it is fully isolated from the
-   * host app's CSS. Written without backticks or ${ so it survives the server's
-   * template-literal inlining untouched.
-   */
-  private buildOverlayScript(): string {
-    return `
-<script>
-(function () {
-  if (window.__JXR_OVERLAY__) return;
-  window.__JXR_OVERLAY__ = true;
-
-  var CONFIRM =
-    'Are you sure you want to choose this template? This action is permanent and you will need to run jxr init to start a fresh project if you decide to change templates later.';
-
-  var host = document.createElement('div');
-  host.setAttribute('data-jxr-overlay', '');
-  document.body.appendChild(host);
-  var root = host.attachShadow({ mode: 'open' });
-
-  var style = document.createElement('style');
-  style.textContent =
-    ':host{all:initial}' +
-    '.wrap{font-family:Inter,system-ui,-apple-system,sans-serif}' +
-    '.gear{position:fixed;right:20px;bottom:20px;width:46px;height:46px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:linear-gradient(145deg,#1b1b22,#0c0c11);color:#f5f3ff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 30px rgba(0,0,0,.45);transition:transform .18s ease,box-shadow .18s ease}' +
-    '.gear:hover{transform:translateY(-1px) rotate(28deg);box-shadow:0 16px 38px rgba(0,0,0,.55)}' +
-    '.gear svg{width:22px;height:22px}' +
-    '.scrim{position:fixed;inset:0;background:rgba(6,6,10,.62);backdrop-filter:blur(6px);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:2147483000}' +
-    '.scrim.open{display:flex}' +
-    '.panel{width:min(560px,92vw);border-radius:18px;border:1px solid rgba(255,255,255,.12);background:#101015;color:#e7e7ee;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}' +
-    '.head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08)}' +
-    '.head input{flex:1;background:transparent;border:0;outline:0;color:#fff;font-size:15px}' +
-    '.kbd{font:11px/1.4 ui-monospace,JetBrains Mono,monospace;color:#9ca3af;border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:2px 6px}' +
-    '.list{max-height:46vh;overflow:auto;padding:8px}' +
-    '.grp{font:600 11px/1.4 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:#6b7280;padding:10px 10px 6px}' +
-    '.item{width:100%;text-align:left;display:flex;gap:12px;align-items:flex-start;padding:11px 12px;border-radius:12px;background:transparent;border:1px solid transparent;color:inherit;cursor:pointer}' +
-    '.item:hover,.item.active{background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.1)}' +
-    '.dot{width:10px;height:10px;border-radius:999px;margin-top:5px;flex:none;box-shadow:0 0 0 3px rgba(255,255,255,.06)}' +
-    '.body{flex:1;min-width:0}' +
-    '.title{display:block;font-weight:600;font-size:14px}' +
-    '.desc{display:block;color:#9ca3af;font-size:12.5px;line-height:1.5;margin-top:2px}' +
-    '.tags{display:block;color:#6b7280;font-size:11px;margin-top:4px;font-family:ui-monospace,monospace}' +
-    '.foot{display:flex;justify-content:space-between;padding:10px 16px;border-top:1px solid rgba(255,255,255,.08);color:#9ca3af;font-size:12px}' +
-    '.confirm{padding:20px}' +
-    '.confirm h3{margin:0 0 8px;font-size:16px;color:#fff}' +
-    '.confirm p{margin:0 0 14px;color:#c7c7d1;font-size:13.5px;line-height:1.6}' +
-    '.warn{color:#fbbf24}' +
-    '.row{display:flex;gap:10px;justify-content:flex-end}' +
-    '.btn{border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,.14);background:transparent;color:#e7e7ee}' +
-    '.btn.primary{background:linear-gradient(145deg,#7c3aed,#a855f7);border-color:transparent;color:#fff}' +
-    '.status{padding:18px;color:#c7c7d1;font-size:13px}';
-  root.appendChild(style);
-
-  var wrap = document.createElement('div');
-  wrap.className = 'wrap';
-  wrap.innerHTML =
-    '<button class="gear" title="JXR dev overlay (press H)">' +
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.11a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.11a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.11a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.11a1.7 1.7 0 0 0-1.49 1z"/></svg>' +
-    '</button>' +
-    '<div class="scrim"><div class="panel" role="dialog" aria-label="JXR command palette"></div></div>';
-  root.appendChild(wrap);
-
-  var gear = wrap.querySelector('.gear');
-  var scrim = wrap.querySelector('.scrim');
-  var panel = wrap.querySelector('.panel');
-  var input;
-  var list;
-  var loading = false;
-  var active = 0;
-  var items = [];
-
-  var tools = [
-    { id: 'tool-docs', name: 'Open JXR documentation', description: 'jxrstudios.online', tags: ['docs', 'help'], accent: '#38bdf8', kind: 'tool', action: function () { window.open('https://jxrstudios.online', '_blank'); } },
-    { id: 'tool-install', name: 'Copy global install command', description: 'pnpm add -g @jxrstudios/jxr', tags: ['install', 'cli'], accent: '#22c55e', kind: 'tool', action: function () { try { navigator.clipboard.writeText('pnpm add -g @jxrstudios/jxr'); } catch (e) {} } },
-    { id: 'tool-hide', name: 'Hide JXR overlay (this session)', description: 'Returns on the next reload', tags: ['overlay', 'hide'], accent: '#f59e0b', kind: 'tool', action: function () { host.remove(); } }
-  ];
-
-  function shell() {
-    panel.innerHTML =
-      '<div class="head"><span class="kbd">JXR</span><input placeholder="Search templates, tools and features\u2026" aria-label="Search" /><span class="kbd">esc</span></div>' +
-      '<div class="list"></div>' +
-      '<div class="foot"><span>\u2191 \u2193 navigate</span><span>\u21B5 select \u00b7 H toggle</span></div>';
-    input = panel.querySelector('input');
-    list = panel.querySelector('.list');
-    input.addEventListener('input', render);
-    input.addEventListener('keydown', onInputKey);
-  }
-
-  function matches(t, q) {
-    var hay = (t.name + ' ' + (t.description || '') + ' ' + (t.tags || []).join(' ')).toLowerCase();
-    return !q || hay.indexOf(q) !== -1;
-  }
-
-  function currentRows() {
-    var q = input.value.trim().toLowerCase();
-    var rows = [];
-    tools.filter(function (t) { return matches(t, q); }).forEach(function (t) { rows.push(t); });
-    items.filter(function (t) { return matches(t, q); }).forEach(function (t) { rows.push(t); });
-    return rows;
-  }
-
-  function render() {
-    var rows = currentRows();
-    if (active >= rows.length) active = Math.max(0, rows.length - 1);
-    list.innerHTML = '';
-    if (!rows.length) {
-      list.innerHTML = '<div class="status">' + (loading ? 'Loading templates\u2026' : 'No matches.') + '</div>';
-      return;
-    }
-    var lastGroup = null;
-    rows.forEach(function (t, i) {
-      var group = t.kind === 'tool' ? 'Tools' : 'Templates';
-      if (group !== lastGroup) {
-        var l = document.createElement('div');
-        l.className = 'grp';
-        l.textContent = group;
-        list.appendChild(l);
-        lastGroup = group;
-      }
-      var el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'item' + (i === active ? ' active' : '');
-      el.innerHTML =
-        '<span class="dot" style="background:' + (t.accent || '#a855f7') + '"></span>' +
-        '<span class="body"><span class="title"></span><span class="desc"></span><span class="tags"></span></span>';
-      el.querySelector('.title').textContent = t.name;
-      el.querySelector('.desc').textContent = t.description || '';
-      el.querySelector('.tags').textContent = (t.tags || []).join(' \u00b7 ');
-      el.addEventListener('mouseenter', function () { active = i; render(); });
-      el.addEventListener('click', function () { choose(t); });
-      list.appendChild(el);
-    });
-    var activeEl = list.querySelector('.item.active');
-    if (activeEl && activeEl.scrollIntoView) activeEl.scrollIntoView({ block: 'nearest' });
-  }
-
-  function choose(t) {
-    if (t.kind === 'tool') {
-      try { t.action && t.action(); } catch (e) {}
-      if (t.id !== 'tool-hide') close();
-      return;
-    }
-    confirmTemplate(t);
-  }
-
-  function onInputKey(e) {
-    var rows = currentRows();
-    if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % Math.max(1, rows.length); render(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); active = (active - 1 + Math.max(1, rows.length)) % Math.max(1, rows.length); render(); }
-    else if (e.key === 'Enter') { e.preventDefault(); if (rows[active]) choose(rows[active]); }
-  }
-
-  function confirmTemplate(t) {
-    panel.innerHTML =
-      '<div class="confirm">' +
-        '<h3>Choose \u201c' + (t.name || t.id) + '\u201d?</h3>' +
-        '<p>' + CONFIRM + '</p>' +
-        '<p class="warn">Your current src/ is backed up to .jxr/backup-&lt;timestamp&gt;/ first.</p>' +
-        '<div class="row"><button class="btn" data-cancel>Cancel</button><button class="btn primary" data-apply>Choose this template</button></div>' +
-      '</div>';
-    panel.querySelector('[data-cancel]').addEventListener('click', function () { shell(); render(); input.focus(); });
-    panel.querySelector('[data-apply]').addEventListener('click', function () { apply(t); });
-  }
-
-  function apply(t) {
-    panel.innerHTML = '<div class="status">Applying \u201c' + (t.name || t.id) + '\u201d\u2026</div>';
-    fetch('/__jxr/apply-template', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: t.id })
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        if (!res || !res.ok) {
-          panel.innerHTML = '<div class="status">Failed: ' + ((res && res.error) || 'unknown error') + '</div>';
-          return;
-        }
-        panel.innerHTML = '<div class="status">Applied \u201c' + (t.name || t.id) + '\u201d. Reloading\u2026</div>';
-        setTimeout(function () { location.reload(); }, 500);
-      })
-      .catch(function (err) {
-        panel.innerHTML = '<div class="status">Failed: ' + err + '</div>';
-      });
-  }
-
-  function load() {
-    loading = true;
-    fetch('/__jxr/templates')
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        items = (res && res.templates ? res.templates : []).map(function (b) {
-          return Object.assign({ kind: 'template' }, b.meta);
-        });
-        loading = false;
-        render();
-      })
-      .catch(function () { loading = false; render(); });
-  }
-
-  function open() { scrim.classList.add('open'); shell(); load(); input.focus(); }
-  function close() { scrim.classList.remove('open'); }
-  function toggle() { scrim.classList.contains('open') ? close() : open(); }
-
-  gear.addEventListener('click', toggle);
-  scrim.addEventListener('click', function (e) { if (e.target === scrim) close(); });
-  document.addEventListener('keydown', function (e) {
-    var typing = /input|textarea/i.test((document.activeElement && document.activeElement.tagName) || '');
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); toggle(); }
-    else if (e.key === 'Escape') close();
-    else if (!typing && (e.key === 'h' || e.key === 'H') && !scrim.classList.contains('open')) { toggle(); }
-  });
-})();
-</script>`;
-  }
-
   private generateHTML(): string {
     const hmrScript = this.config.enableHMR ? `
     <script>
@@ -858,7 +827,7 @@ export default \`${escapedCSS}\`;
     const importMap = buildImportMap();
 
     // Dev-only overlay (never present in a production build).
-    const overlayScript = this.config.overlay ? this.buildOverlayScript() : "";
+    const overlayScript = this.config.overlay ? buildExplorerScript() : "";
 
     // Check if we have a main.tsx/bootstrap file - if so, use it directly
     // Otherwise use the component entry point pattern

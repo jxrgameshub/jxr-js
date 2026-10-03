@@ -8,6 +8,6 @@
     "build": "jxr build"
   },
   "dependencies": {
-    "@jxrstudios/jxr": "^1.6.0"
+    "@jxrstudios/jxr": "^1.7.0"
   }
 }

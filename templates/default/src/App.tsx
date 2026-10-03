@@ -118,7 +118,7 @@ const PRESETS: Preset[] = [
   },
 ];
 
-/** Metadata served by the dev server at /__jxr/templates. */
+/** Metadata served by the dev server at /__jxr/templates (full catalog). */
 interface TemplateMeta {
   id: string;
   name: string;
@@ -126,6 +126,10 @@ interface TemplateMeta {
   tags: string[];
   accent: string;
   kind: string;
+  /** True when the dev server can render this template live in the explorer. */
+  livePreview?: boolean;
+  /** Entry file used by the live preview (e.g. src/main.tsx). */
+  entry?: string;
 }
 
 const CONFIRM_MESSAGE =
@@ -190,6 +194,11 @@ export default function App() {
       '// Radix primitives resolve through the JXR import map.\n';
     navigator.clipboard?.writeText(snippet);
     setStatus('Copied the Radix + palette import snippet to your clipboard.');
+  }, []);
+
+  const openPreview = useCallback((template: TemplateMeta) => {
+    window.open('/__jxr/preview/' + template.id, '_blank');
+    setStatus('Opening a live preview of ' + template.name + '…');
   }, []);
 
   const applyTemplate = useCallback(async (template: TemplateMeta) => {
@@ -277,12 +286,24 @@ export default function App() {
       ...catalog.map<Command>((item) => ({
         id: 'template-' + item.id,
         label: item.name,
-        group: 'Templates',
+        group: 'Templates · apply',
         description: item.description,
         accent: item.accent,
+        hint: item.livePreview ? 'Live preview available' : 'Source preview only',
         keywords: ['template', ...(item.tags ?? []), item.id],
         onSelect: () => setPending(item),
       })),
+      ...catalog
+        .filter((item) => item.livePreview)
+        .map<Command>((item) => ({
+          id: 'preview-' + item.id,
+          label: 'Preview ' + item.name,
+          group: 'Templates · preview',
+          description: 'Open the sandboxed live preview in a new tab',
+          accent: item.accent,
+          keywords: ['preview', 'sandbox', 'template', item.id],
+          onSelect: () => openPreview(item),
+        })),
       {
         id: 'tool-importmap',
         label: 'Inspect shared import map',
@@ -314,7 +335,7 @@ export default function App() {
 
   const catalogHint =
     catalogState === 'ready'
-      ? catalog.length + ' project templates available — open the palette and pick “Templates”.'
+      ? catalog.length + ' project templates — browse live previews in the explorer (gear, bottom-right) or the palette.'
       : catalogState === 'loading'
         ? 'Loading project templates from the dev server…'
         : 'Project templates appear here when running under jxr dev.';

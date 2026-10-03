@@ -8,7 +8,7 @@
     "build": "jxr build --platform=native"
   },
   "dependencies": {
-    "@jxrstudios/jxr": "^1.6.0",
+    "@jxrstudios/jxr": "^1.7.0",
     "react-native": "^0.76.0"
   }
 }

@@ -59,11 +59,13 @@ are in. Do not skip Pass 1.
   server-side. Verify after editing CSS:
   `grep -c '`' src/styles.css` and `grep -c '\${' src/styles.css` → both `0`.
 - The `@/` path alias maps to `src/` (e.g. `@/components/ui/Button`).
-- A **dev-only overlay** floats in the corner: a gear button (or press `H`) opens a
-  command palette that lists the official JXR templates. Choosing one asks for
-  permanent-choice confirmation, then drops it into `src/` (your current `src/` is
-  backed up to `.jxr/backup-<timestamp>/`). This overlay is injected by the dev
-  server only — it never appears in a production build.
+- A **dev-only Template Explorer** floats in the corner: a gear button (or press
+  `H` / `⌘K` / `Ctrl-K`) opens a search (center-top) over a carousel of every
+  official template. Web-renderable ones render a **live preview** in a sandboxed
+  iframe (`/__jxr/preview/<id>`); the rest show a **source preview** with a note.
+  Applying asks for permanent-choice confirmation, then drops it into `src/` (your
+  current `src/` is backed up to `.jxr/backup-<timestamp>/`). This explorer is
+  injected by the dev server only — it never appears in a production build.
 
 ### Production — `jxr build`
 - esbuild bundles `src/main.tsx` (or the first entry in `src/`) to `dist/` with
@@ -92,10 +94,11 @@ package.json        scripts: dev / build / deploy
   resolve under `jxr dev`. Imports under `@/…` are local files, not packages.
 - **Radix / UI primitives** resolve through the import map — no install required.
 - **Edit `src/App.tsx` and save** → HMR reloads instantly.
-- **Preview another template** with the dev overlay gear (press `H`), or scaffold a
-  fresh project with `jxr init my-app --template=<id>` (`jxr init --list` to see
-  the catalog). Template choice at `jxr init` is permanent — switch only via the
-  dev overlay (which backs up `src/`) or by starting a fresh project.
+- **Preview another template** in the Template Explorer (gear, or press `H`), which
+  renders live previews / source previews before you commit; or scaffold a fresh
+  project with `jxr init my-app --template=<id>` (`jxr init --list` to see the
+  catalog). Template choice at `jxr init` is permanent — switch only via the
+  explorer (which backs up `src/`) or by starting a fresh project.
 
 ---
 
@@ -105,6 +108,8 @@ package.json        scripts: dev / build / deploy
 jxr dev --port=3111        # then, in another shell:
 curl -s localhost:3111/__health
 curl -s localhost:3111/ | grep -c "__JXR_OVERLAY__"   # expect >= 1
+curl -s localhost:3111/__jxr/templates | head -c 400  # expect 11 templates
+curl -s localhost:3111/__jxr/preview/minimal | head   # preview HTML
 curl -s -X POST localhost:3111/__jxr/apply-template \
   -H 'Content-Type: application/json' -d '{"id":"minimal"}'   # expect ok:true
 

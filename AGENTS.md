@@ -87,14 +87,17 @@ source files on disk (src/)
                  └─ generateHTML()             emits index.html + import map
                       └─ buildImportMap()      ← src/import-map.ts (shared)
             └─ HTTP server (JXRServerManager.start)
-                 ├─ GET /                      index.html (import map + HMR + overlay)
-                 ├─ GET /src/*.{tsx,ts,...}    EnhancedTranspiler (Babel) → ESM
+                 ├─ GET /                         index.html (import map + HMR + explorer)
+                 ├─ GET /src/*.{tsx,ts,...}       EnhancedTranspiler (Babel) → ESM
                  │    └─ rewrites @/ → /src and bare → import-map URLs
-                 ├─ GET /src/*.css             served as JS that injects <style>
-                 ├─ GET /__hmr                 Server-Sent Events (reload)
-                 ├─ GET /__health              status JSON
-                 ├─ GET /__jxr/templates       catalog + inline template source (NEW)
-                 └─ POST /__jxr/apply-template backup src/ → drop-in → reload (NEW)
+                 ├─ GET /src/*.css                served as JS that injects <style>
+                 ├─ GET /__hmr                    Server-Sent Events (reload)
+                 ├─ GET /__health                 status JSON
+                 ├─ GET /__jxr/templates          FULL catalog (all 11) + source per template
+                 ├─ GET /__jxr/preview/<id>       sandboxed preview HTML (live templates)
+                 ├─ GET /__jxr/preview/<id>/src/* isolated preview module graph
+                 │    └─ rewritePreviewCode() re-bases "/src/…" → "/__jxr/preview/<id>/src/…"
+                 └─ POST /__jxr/apply-template    backup src/ → drop-in → reload
 ```
 Key facts:
 - The browser resolves bare specifiers (`react`, `@radix-ui/*`, `wouter`, …) via
@@ -102,9 +105,14 @@ Key facts:
 - CSS is inlined into a **JavaScript template literal** server-side. **CSS must not
   contain backticks or `${`** or it breaks the dev server. Verify after editing:
   `grep -c '`' file.css` and `grep -c '\${' file.css` must both be `0`.
-- The **dev overlay** (gear button → template command palette) is injected by the
-  dev server only. It is part of `generateHTML()` output and therefore can never
-  appear in a production bundle.
+- The **Template Explorer** (gear → centered search + carousel + live/source stage)
+  is injected by the dev server only via `generateHTML()`, so it can never appear
+  in a production bundle. Its client script lives in `src/template-explorer.ts`
+  (`buildExplorerScript()`), which must also avoid backticks/`${`.
+- The preview namespace is **isolated**: preview modules are transpiled with a
+  `src/`-prefixed filename so the transpiler emits `/src/…` specifiers, then
+  `rewritePreviewCode()` re-bases them under `/__jxr/preview/<id>/`. The running
+  app's VirtualFS is never touched by a preview.
 
 ### 3.2 Build path — `jxr build` (esbuild)
 ```
@@ -119,8 +127,9 @@ findEntryFile() / assertJxrProject()          fail fast outside a project
 ### 3.3 The single-source-of-truth map
 | Fact | Defined once in | Consumed by |
 |------|-----------------|-------------|
-| Module URLs (import map) | `src/import-map.ts` (`IMPORT_MAP`) | `bin/jxr.js` build plugin, `JXRServerManager` dev HTML |
-| Template catalog | `src/template-registry.ts` (`JXR_TEMPLATES`) | CLI `jxr init`, dev `/__jxr/templates`, overlay + palette |
+| Module URLs (import map) | `src/import-map.ts` (`IMPORT_MAP`) | `bin/jxr.js` build plugin, `JXRServerManager` dev HTML + preview HTML |
+| Template catalog | `src/template-registry.ts` (`JXR_TEMPLATES`) | CLI `jxr init`, dev `/__jxr/templates`, Template Explorer, palette |
+| Template explorer UI | `src/template-explorer.ts` (`buildExplorerScript()`) | `JXRServerManager.generateHTML()` (dev only) |
 | Entry-point candidates | `bin/jxr.js` (`ENTRY_CANDIDATES`) | `jxr build`, `jxr dev` guard |
 
 > If you need the same fact in a second place, **export it from the owning module**
@@ -148,9 +157,11 @@ in the browser import map without shims/Babel. Templates that do this are marked
 1. Create `templates/<id>/` with `src/` + `package.json` (+ `tsconfig.json`,
    `styles.css` as needed). `src/main.tsx` or `src/App.tsx` must exist.
 2. Add a `JXRTemplateMeta` entry in `src/template-registry.ts` (id, name,
-   description, tags, accent, kind, **browserPreview**).
-3. Set `browserPreview: true` **only if** the template renders in a browser with
+   description, tags, accent, kind, **entry**, **livePreview**, optional **previewNote**).
+3. Set `livePreview: true` **only if** the template renders in a browser with
    no Node-side imports (no `@jxrstudios/jxr`, no `fs`, no console-only entry).
+   Otherwise set `livePreview: false` and write a `previewNote` explaining why
+   (so the source preview can tell the developer how to run it).
 4. `templates/` is published wholesale (`package.json` → `files: ["templates/"]`),
    so no other packaging change is needed.
 5. Verify: `jxr init <name> --template=<id> --yes` then `jxr build` inside it.
@@ -177,16 +188,20 @@ rm -rf /tmp/jxr-check && mkdir -p /tmp/jxr-check && cd /tmp/jxr-check
 node /path/to/jxr-js/bin/jxr.js init app --template=default --yes
 cd app && node /path/to/jxr-js/bin/jxr.js build
 
-# Dev endpoints + overlay (run inside a scaffolded app)
+# Dev endpoints + explorer (run inside a scaffolded app)
 node /path/to/jxr-js/bin/jxr.js dev --port=3111 &
 curl -s localhost:3111/__health
-curl -s localhost:3111/__jxr/templates | head -c 400
+curl -s localhost:3111/__jxr/templates | head -c 400        # expect 11 templates
+curl -s localhost:3111/__jxr/preview/default | head        # preview HTML
+curl -s localhost:3111/__jxr/preview/default/src/App.tsx \
+  | grep -o '/__jxr/preview/default/src/[^\"]*'             # re-based specifiers
+curl -s -o /dev/null -w '%{http_code}' localhost:3111/__jxr/preview/dashboard  # 409
 curl -s localhost:3111/ | grep -c "__JXR_OVERLAY__"        # expect >= 1
 curl -s -X POST localhost:3111/__jxr/apply-template \
   -H 'Content-Type: application/json' -d '{"id":"minimal"}'   # expect ok:true
 
-# Production build must NOT contain the overlay
-grep -c "__JXR_OVERLAY__" dist/index.html                  # expect 0
+# Production build must NOT contain the explorer
+grep -c "__JXR_OVERLAY__" dist/assets/*.js                 # expect 0
 
 # Template-literal safety for any stylesheet the dev server inlines
 grep -c '`'   src/styles.css ; true                        # expect 0
