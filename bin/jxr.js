@@ -53,6 +53,34 @@ function mapToImportMapKey(spec) {
   return IMPORT_MAP_KEYS.find((key) => spec === key || spec.startsWith(key + "/"));
 }
 
+/** Ordered entry-point candidates for a JXR project (build + dev agree on these). */
+const ENTRY_CANDIDATES = ["src/main.tsx", "src/main.ts", "src/main.jsx", "src/App.tsx", "src/index.tsx"];
+
+/** Return the first existing entry file, or null when neither exists. */
+function findEntryFile() {
+  return ENTRY_CANDIDATES.find((file) => existsSync(file)) || null;
+}
+
+/**
+ * Fail fast with an actionable message when the CLI is run outside a JXR
+ * project (e.g. a bare folder or a monorepo root). Returns the entry file.
+ */
+function assertJxrProject() {
+  const entry = findEntryFile();
+  if (entry) return entry;
+  console.error(`❌ No JXR project found in ${process.cwd()}`);
+  console.error("");
+  console.error("   Expected an entry file such as src/main.tsx or src/App.tsx.");
+  console.error("   If you are in the wrong folder, cd into your app first.");
+  console.error("");
+  console.error("   To create a new project:");
+  console.error("");
+  console.error("     jxr init my-app");
+  console.error("     cd my-app");
+  console.error("     jxr dev");
+  process.exit(1);
+}
+
 function printUsage(version) {
   console.log(`JXR.js v${version} — Edge OS Runtime Framework
 
@@ -186,15 +214,16 @@ if (command === "help" || command === "--help" || command === "-h") {
     const path = await import("path");
     const crypto = await import("crypto");
 
+    // Find entry point — fail fast with a clear message when run outside a
+    // JXR project (e.g. a bare folder or monorepo root). This runs BEFORE any
+    // output directory is created so a mis-invocation leaves no stray dist/.
+    const entryFile = args.includes("--allow-empty")
+      ? findEntryFile() || "src/index.tsx"
+      : assertJxrProject();
+
     // Ensure output directory exists
     await mkdir(outDir, { recursive: true });
     await mkdir(path.join(outDir, "assets"), { recursive: true });
-
-    // Find entry point
-    const entryFile = fs.existsSync("src/main.tsx") ? "src/main.tsx" :
-                      fs.existsSync("src/main.ts") ? "src/main.ts" :
-                      fs.existsSync("src/main.jsx") ? "src/main.jsx" :
-                      fs.existsSync("src/App.tsx") ? "src/App.tsx" : "src/index.tsx";
 
     // Bare imports that the JXR runtime resolves at runtime through the browser
     // import map (e.g. "react" -> https://esm.sh/react@19). These must be left
@@ -497,6 +526,9 @@ if (command === "help" || command === "--help" || command === "-h") {
   // Dev server (default)
   const port = parseInt(process.env.PORT || args.find((a, i) => args[i - 1] === "--port" || a.startsWith("--port="))?.split("=")[1] || "3000");
   const hmr = !args.includes("--no-hmr");
+
+  // Refuse to start when there is no JXR project in the current directory.
+  if (!args.includes("--allow-empty")) assertJxrProject();
 
   const server = new JXRServerManager({ port, enableHMR: hmr });
 
