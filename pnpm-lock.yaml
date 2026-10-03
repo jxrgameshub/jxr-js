@@ -15,7 +15,7 @@ importers:
         specifier: ^0.25.12
         version: 0.25.12
       nanoid:
-        specifier: ^5.1.5
+        specifier: ^5.1.16
         version: 5.1.16
     devDependencies:
       '@types/babel__standalone':
