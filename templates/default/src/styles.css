@@ -1,4 +1,24 @@
+/*
+  JXR.js default template styles.
+
+  Ported from the jxr-shaders-components reference ("Lotus Metal", "Ember Metal",
+  "Aurora Border"). The originals used @paper-design/shaders-react (WebGL); these
+  are faithful, dependency-free CSS recreations so the starter stays self-contained
+  and works identically under jxr dev (zero-build) and jxr build (esbuild).
+
+  NOTE: the dev server inlines this file inside a JS template literal, so this
+  stylesheet must never contain backticks or the literal interpolation opener.
+*/
+
 :root {
+  --bg: #08080a;
+  --panel: rgba(255, 255, 255, 0.035);
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #f8fafc;
+  --muted: rgba(255, 255, 255, 0.55);
+  --muted-strong: rgba(255, 255, 255, 0.78);
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: dark;
 }
 
@@ -6,11 +26,387 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
-  background: #0a0a0a;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.hidden {
+  display: none;
 }
 
 code {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
+}
+
+/* ------------------------------------------------------------------ layout */
+
+.jxr-app {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  overflow: hidden;
+  padding: clamp(1.5rem, 5vw, 4.5rem);
+  display: grid;
+  place-items: center;
+}
+
+/* Ambient wash from the selected preset. */
+.jxr-app::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  z-index: -2;
+  background:
+    radial-gradient(38% 45% at 50% 12%, var(--aurora-glow, transparent), transparent 70%),
+    radial-gradient(52% 58% at 50% 48%, var(--metal-glow, transparent), transparent 72%);
+  filter: blur(34px);
+  animation: jxr-drift 18s ease-in-out infinite alternate;
+}
+
+.jxr-app::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(75% 75% at 50% 40%, #000, transparent 100%);
+  -webkit-mask-image: radial-gradient(75% 75% at 50% 40%, #000, transparent 100%);
+}
+
+.jxr-shell {
+  width: min(680px, 100%);
+}
+
+/* ----------------------------------------------------------- aurora border */
+
+.jxr-aurora {
+  position: relative;
+  border-radius: 26px;
+  padding: 3px;
+  overflow: hidden;
+  box-shadow: 0 30px 90px -35px var(--metal-glow, rgba(0, 0, 0, 0.8));
+}
+
+.jxr-aurora::before {
+  content: "";
+  position: absolute;
+  inset: -140%;
+  z-index: 0;
+  background: conic-gradient(
+    from 0deg,
+    var(--aurora-1),
+    var(--aurora-2),
+    var(--aurora-3),
+    var(--aurora-4),
+    var(--aurora-5),
+    var(--aurora-1)
+  );
+  animation: jxr-spin 9s linear infinite;
+}
+
+.jxr-aurora::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: rgba(9, 9, 11, 0.36);
+  animation: jxr-breathe 4.4s ease-in-out infinite;
+}
+
+.jxr-card {
+  position: relative;
+  z-index: 2;
+  border-radius: 23px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(14, 14, 18, 0.94), rgba(8, 8, 10, 0.97));
+  padding: clamp(1.4rem, 4vw, 2.4rem);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ------------------------------------------------------------------- hero */
+
+.jxr-hero {
+  display: flex;
+  align-items: center;
+  gap: 1.15rem;
+}
+
+.jxr-mark {
+  position: relative;
+  flex: none;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  /* Metal sheen driven by the active preset. */
+  background:
+    radial-gradient(120% 120% at 30% 22%, var(--metal-hi) 0%, transparent 42%),
+    conic-gradient(from 210deg, var(--metal-1), var(--metal-2), var(--metal-3), var(--metal-4), var(--metal-1));
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.55),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.55),
+    0 14px 34px -12px var(--metal-glow);
+  animation: jxr-metal-shift 6s ease-in-out infinite alternate;
+}
+
+.jxr-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(60% 45% at 34% 26%, rgba(255, 255, 255, 0.85), transparent 60%);
+  mix-blend-mode: screen;
+  opacity: 0.7;
+}
+
+.jxr-eyebrow {
+  margin: 0 0 0.3rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.jxr-title {
+  margin: 0;
+  font-size: clamp(2.1rem, 6vw, 3.1rem);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.jxr-tagline {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* ---------------------------------------------------------------- presets */
+
+.jxr-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.6rem 0;
+}
+
+.jxr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.jxr-chip:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.jxr-chip.is-active {
+  border-color: color-mix(in srgb, var(--swatch) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--swatch) 35%, transparent);
+  color: #fff;
+}
+
+.jxr-dot {
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--swatch) 70%, transparent);
+}
+
+/* -------------------------------------------------------------- demo grid */
+
+.jxr-demo {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: stretch;
+}
+
+.jxr-panel {
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 1.1rem;
+}
+
+.jxr-panel .jxr-label {
+  margin: 0 0 0.85rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Metal orb sample. */
+.jxr-orb {
+  position: relative;
+  width: 138px;
+  height: 138px;
+  margin: 0.4rem auto 0.2rem;
+  border-radius: 50%;
+  background:
+    radial-gradient(90% 90% at 32% 26%, var(--metal-hi) 0%, transparent 44%),
+    conic-gradient(from 200deg, var(--metal-1), var(--metal-2), var(--metal-3), var(--metal-4), var(--metal-1));
+  box-shadow:
+    inset 0 -14px 26px rgba(0, 0, 0, 0.6),
+    inset 0 2px 3px rgba(255, 255, 255, 0.6),
+    0 24px 60px -20px var(--metal-glow);
+  animation: jxr-metal-shift 8s ease-in-out infinite alternate;
+}
+
+.jxr-orb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(58% 40% at 32% 24%, rgba(255, 255, 255, 0.9), transparent 58%);
+  mix-blend-mode: screen;
+  opacity: 0.75;
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.jxr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 1.5rem;
+}
+
+.jxr-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 0.72rem 1.35rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.jxr-btn:hover {
+  transform: translateY(-1px);
+}
+
+.jxr-btn:active {
+  transform: translateY(0);
+}
+
+.jxr-btn-primary {
+  color: #08080a;
+  background: linear-gradient(135deg, var(--metal-hi), var(--metal-2));
+  box-shadow: 0 16px 34px -14px var(--metal-glow);
+}
+
+.jxr-btn-ghost {
+  color: var(--muted-strong);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--line);
+}
+
+.jxr-btn-ghost:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.jxr-count {
+  margin-left: 0.55rem;
+  font-family: var(--font-mono);
+  opacity: 0.85;
+}
+
+/* ----------------------------------------------------------------- footer */
+
+.jxr-hint {
+  margin: 1.35rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.jxr-hint code {
+  color: var(--muted-strong);
+}
+
+/* -------------------------------------------------------------- keyframes */
+
+@keyframes jxr-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes jxr-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes jxr-metal-shift {
+  0% {
+    filter: hue-rotate(0deg) saturate(1);
+  }
+  100% {
+    filter: hue-rotate(28deg) saturate(1.18);
+  }
+}
+
+@keyframes jxr-drift {
+  0% {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(2%, 2%, 0) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jxr-aurora::before,
+  .jxr-aurora::after,
+  .jxr-mark,
+  .jxr-orb,
+  .jxr-app::before {
+    animation: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .jxr-hero {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .jxr-actions {
+    justify-content: center;
+  }
 }

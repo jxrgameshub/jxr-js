@@ -694,7 +694,9 @@ jxr/
 │   └── worker-pool.ts
 ├── bin/
 │   └── jxr.js               # CLI entry
-├── zzz_react_template/      # Project templates
+├── templates/
+│   └── default/             # Self-contained starter (App, styles, tsconfig)
+├── zzz_react_template/      # Legacy template (kept for reference)
 └── tests/
 ```
 
