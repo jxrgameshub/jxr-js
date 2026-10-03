@@ -43,6 +43,15 @@ export type {
   ImportMap,
 } from './module-resolver.ts';
 
+// Shared browser import map (single source of truth for dev + build)
+export {
+  IMPORT_MAP,
+  IMPORT_MAP_KEYS,
+  isBareSpecifier,
+  mapToImportMapKey,
+  buildImportMap,
+} from './import-map.ts';
+
 export { JXRRuntime, jxrRuntime } from './runtime.ts';
 export type { JXRRuntimeConfig, JXRRuntimeMetrics } from './runtime.ts';
 

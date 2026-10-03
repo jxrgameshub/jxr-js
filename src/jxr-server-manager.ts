@@ -1,7 +1,12 @@
 import { readFile, readdir, watch } from "fs/promises";
 import path from "path";
 import http from "http";
-import { JXRRuntime, findOrCreateEntryPoint, EnhancedTranspiler } from "./index.ts";
+import {
+  JXRRuntime,
+  findOrCreateEntryPoint,
+  EnhancedTranspiler,
+  buildImportMap,
+} from "./index.ts";
 import type { ProjectFile } from "./index.ts";
 
 export interface JXRServerConfig {
@@ -408,50 +413,9 @@ export default \`${escapedCSS}\`;
       evtSource.onerror = () => console.log('[JXR] HMR connection lost');
     </script>` : '';
 
-    // Import map with react/jsx-runtime for Babel's automatic runtime
-    // Includes common dependencies used by JXR projects
-    const importMap = {
-      "imports": {
-        "react": "https://esm.sh/react@19.2.4",
-        "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
-        "react/jsx-dev-runtime": "https://esm.sh/react@19.2.4/jsx-dev-runtime",
-        "react-dom/client": "https://esm.sh/react-dom@19.2.4/client",
-        "wouter": "https://esm.sh/wouter@3.6.0?external=react",
-        "lucide-react": "https://esm.sh/lucide-react@0.483.0?external=react",
-        "sonner": "https://esm.sh/sonner@2.0.1?external=react",
-        "next-themes": "https://esm.sh/next-themes@0.4.6?external=react",
-        "@radix-ui/react-dialog": "https://esm.sh/@radix-ui/react-dialog@1.1.6?external=react",
-        "@radix-ui/react-tooltip": "https://esm.sh/@radix-ui/react-tooltip@1.1.8?external=react",
-        "@radix-ui/react-slot": "https://esm.sh/@radix-ui/react-slot@1.1.2?external=react",
-        "@radix-ui/react-primitive": "https://esm.sh/@radix-ui/react-primitive@2.0.2?external=react",
-        "@radix-ui/react-compose-refs": "https://esm.sh/@radix-ui/react-compose-refs@1.1.1?external=react",
-        "@radix-ui/react-context": "https://esm.sh/@radix-ui/react-context@1.1.1?external=react",
-        "@radix-ui/react-use-controllable-state": "https://esm.sh/@radix-ui/react-use-controllable-state@1.1.0?external=react",
-        "@radix-ui/react-use-escape-keydown": "https://esm.sh/@radix-ui/react-use-escape-keydown@1.1.0?external=react",
-        "@radix-ui/react-use-layout-effect": "https://esm.sh/@radix-ui/react-use-layout-effect@1.1.0?external=react",
-        "@radix-ui/react-dismissable-layer": "https://esm.sh/@radix-ui/react-dismissable-layer@1.1.5?external=react",
-        "@radix-ui/react-focus-guards": "https://esm.sh/@radix-ui/react-focus-guards@1.1.1?external=react",
-        "@radix-ui/react-focus-scope": "https://esm.sh/@radix-ui/react-focus-scope@1.1.2?external=react",
-        "@radix-ui/react-portal": "https://esm.sh/@radix-ui/react-portal@1.1.4?external=react",
-        "@radix-ui/react-presence": "https://esm.sh/@radix-ui/react-presence@1.1.2?external=react",
-        "@radix-ui/react-id": "https://esm.sh/@radix-ui/react-id@1.1.0?external=react",
-        "@radix-ui/primitive": "https://esm.sh/@radix-ui/primitive@1.1.1",
-        "aria-hidden": "https://esm.sh/aria-hidden@1.2.4",
-        "react-remove-scroll": "https://esm.sh/react-remove-scroll@2.6.3?external=react",
-        "tslib": "https://esm.sh/tslib@2.8.1",
-        "get-nonce": "https://esm.sh/get-nonce@1.0.1",
-        "use-callback-ref": "https://esm.sh/use-callback-ref@1.3.3?external=react",
-        "use-sidecar": "https://esm.sh/use-sidecar@1.1.3?external=react",
-        "detect-node-es": "https://esm.sh/detect-node-es@1.1.0",
-        "copy-to-clipboard": "https://esm.sh/copy-to-clipboard@3.3.3",
-        "toggle-selection": "https://esm.sh/toggle-selection@1.0.6",
-        "clsx": "https://esm.sh/clsx@2.1.1",
-        "tailwind-merge": "https://esm.sh/tailwind-merge@3.0.2",
-        "class-variance-authority": "https://esm.sh/class-variance-authority@0.7.1",
-        "framer-motion": "https://esm.sh/framer-motion@12.5.0?external=react,motion-dom",
-        "motion-dom": "https://esm.sh/motion-dom@12.5.0"
-      }
-    };
+    // Import map — shared with `jxr build` via the framework's single source
+    // of truth so dev and production resolve identical module URLs.
+    const importMap = buildImportMap();
 
     // Check if we have a main.tsx/bootstrap file - if so, use it directly
     // Otherwise use the component entry point pattern

@@ -156,9 +156,13 @@ Options:
 - `dist/jxr-manifest.json` — ECDSA-P256 signed manifest
 
 > Bare imports covered by the JXR import map (`react`, `react/jsx-runtime`,
-> `react-dom/client`, `wouter`, `lucide-react`) are left external and resolved at
-> runtime from `esm.sh`, so a project that runs under `jxr dev` also builds
-> without a local `react` install.
+> `react-dom/client`, `wouter`, `lucide-react`, the `@radix-ui/*` primitives,
+> `clsx`, `tailwind-merge`, `class-variance-authority`, `framer-motion`, …) are
+> left external and resolved at runtime from `esm.sh`, so a project that runs
+> under `jxr dev` also builds without a local install.
+>
+> `jxr dev` and `jxr build` share a **single source of truth** for this map
+> (`src/import-map.ts`), so the two can never drift.
 
 ### `jxr serve`
 
@@ -545,14 +549,23 @@ await deployer.rollback(previousDeploymentId);
 
 ### "Cannot find module 'react'"
 
-JXR uses import maps for external dependencies. Ensure your HTML includes:
+JXR resolves external dependencies through a browser import map. `jxr dev` and
+`jxr build` both inject the map automatically, so you normally don't write it by
+hand. The shared map (see `src/import-map.ts`) covers React 19, `react-dom/client`,
+`wouter`, `lucide-react`, the `@radix-ui/*` primitives, `clsx`, `tailwind-merge`,
+`class-variance-authority`, `framer-motion`, `sonner` and `next-themes`.
+
+For a static/third-party host that doesn't run the JXR server, include an
+equivalent map yourself:
 
 ```html
 <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@19",
-    "react-dom/client": "https://esm.sh/react-dom@19/client"
+    "react": "https://esm.sh/react@19.2.4",
+    "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+    "react-dom/client": "https://esm.sh/react-dom@19.2.4/client?external=react",
+    "@radix-ui/react-dialog": "https://esm.sh/@radix-ui/react-dialog@1.1.6?external=react,react-dom"
   }
 }
 </script>
@@ -589,14 +602,18 @@ jxr dev --no-hmr  # Disable HMR as workaround
 
 Imports must be one of:
 
-1. A relative path (`./Component`)
-2. Covered by the import map — `react`, `react/jsx-runtime`, `react-dom/client`,
-   `wouter`, `lucide-react`
+1. A relative path (`./Component`) or the `@/` alias (`@/components/ui/Button`)
+2. Covered by the shared import map — `react`, `react/jsx-runtime`,
+   `react-dom/client`, `wouter`, `lucide-react`, the `@radix-ui/*` primitives,
+   `clsx`, `tailwind-merge`, `class-variance-authority`, `framer-motion`, …
 3. Installed locally in `node_modules` (any other bare package)
 
 For a bare package that is neither in the import map nor installed locally, the
 build fails and names the specifier. Install it (`pnpm add <pkg>`) or add it to
-the import map.
+`src/import-map.ts` (one edit — both dev and build pick it up).
+
+> Running `jxr build` / `jxr dev` outside a project now fails fast with a clear
+> message instead of an esbuild resolve error.
 
 ---
 

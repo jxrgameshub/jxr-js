@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-import { JXRServerManager, JXRDeployer } from "../dist/index.js";
+import {
+  JXRServerManager,
+  JXRDeployer,
+  IMPORT_MAP,
+  isBareSpecifier,
+  mapToImportMapKey,
+} from "../dist/index.js";
 
 import { mkdir, writeFile, cp, readdir, readFile, stat } from "fs/promises";
 import { existsSync, createReadStream } from "fs";
@@ -28,30 +34,9 @@ async function getFrameworkVersion() {
 }
 
 /**
- * The single source of truth for the browser import map.
- * Dev server and production build must agree, otherwise a project that runs
- * under `jxr dev` would fail under `jxr build`.
+ * Shared browser import map (single source of truth) is imported from the
+ * framework so `jxr dev` and `jxr build` always agree.
  */
-const IMPORT_MAP = {
-  react: "https://esm.sh/react@19.2.4",
-  "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
-  "react/jsx-dev-runtime": "https://esm.sh/react@19.2.4/jsx-dev-runtime",
-  "react-dom": "https://esm.sh/react-dom@19.2.4?external=react",
-  "react-dom/client": "https://esm.sh/react-dom@19.2.4/client?external=react",
-  wouter: "https://esm.sh/wouter@3.6.0?external=react",
-  "lucide-react": "https://esm.sh/lucide-react@0.483.0?external=react",
-};
-
-/** Bare specifier roots that should be left external (resolved by the browser import map). */
-const IMPORT_MAP_KEYS = Object.keys(IMPORT_MAP).sort((a, b) => b.length - a.length);
-
-function isBareSpecifier(spec) {
-  return !spec.startsWith(".") && !spec.startsWith("/") && !spec.startsWith("@/") && !spec.startsWith("http");
-}
-
-function mapToImportMapKey(spec) {
-  return IMPORT_MAP_KEYS.find((key) => spec === key || spec.startsWith(key + "/"));
-}
 
 /** Ordered entry-point candidates for a JXR project (build + dev agree on these). */
 const ENTRY_CANDIDATES = ["src/main.tsx", "src/main.ts", "src/main.jsx", "src/App.tsx", "src/index.tsx"];
