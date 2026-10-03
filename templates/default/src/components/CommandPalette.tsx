@@ -16,6 +16,10 @@ export interface Command {
   hint?: string;
   keywords?: string[];
   icon?: ReactNode;
+  /** Optional secondary line (used for template descriptions). */
+  description?: string;
+  /** Optional accent color, rendered as a small swatch dot. */
+  accent?: string;
   onSelect: () => void;
 }
 
@@ -152,11 +156,22 @@ export function CommandPalette({
                     onMouseMove={() => setActiveIndex(index)}
                     onClick={() => run(cmd)}
                   >
-                    <span className="jxr-palette-item-icon" aria-hidden="true">
-                      {cmd.icon}
-                    </span>
+                    {cmd.accent ? (
+                      <span
+                        className="jxr-palette-swatch"
+                        style={{ background: cmd.accent }}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <span className="jxr-palette-item-icon" aria-hidden="true">
+                        {cmd.icon}
+                      </span>
+                    )}
                     <span className="jxr-palette-item-body">
                       <span className="jxr-palette-item-label">{cmd.label}</span>
+                      {cmd.description && (
+                        <span className="jxr-palette-item-desc">{cmd.description}</span>
+                      )}
                       {cmd.hint && <span className="jxr-palette-item-hint">{cmd.hint}</span>}
                     </span>
                     {active && <CornerDownLeft className="jxr-palette-enter" aria-hidden="true" />}

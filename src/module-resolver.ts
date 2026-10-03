@@ -93,6 +93,11 @@ export class VirtualFS {
     return true;
   }
 
+  /** Remove every file. Used when hot-swapping a project template at runtime. */
+  clear(): void {
+    this.files.clear();
+  }
+
   list(prefix?: string): VirtualFile[] {
     const all = Array.from(this.files.values());
     return prefix ? all.filter((f) => f.path.startsWith(prefix)) : all;

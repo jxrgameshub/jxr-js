@@ -518,6 +518,15 @@ code {
   color: #fff;
 }
 
+.jxr-palette-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  flex: none;
+  margin: 0 0.2rem;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+}
+
 .jxr-palette-item-body {
   display: flex;
   flex-direction: column;
@@ -535,6 +544,15 @@ code {
 .jxr-palette-item-hint {
   font-size: 0.72rem;
   color: var(--muted);
+}
+
+.jxr-palette-item-desc {
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .jxr-palette-enter {
@@ -576,6 +594,41 @@ code {
   font-family: var(--font-mono);
   font-size: 0.68rem;
   line-height: 1;
+}
+
+/* --------------------------------------------------------- confirm dialog */
+
+.jxr-confirm {
+  padding: 1.5rem;
+}
+
+.jxr-confirm-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  color: var(--text);
+}
+
+.jxr-confirm-text {
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--muted-strong);
+}
+
+.jxr-confirm-note {
+  margin: 0 0 1.25rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.jxr-confirm-note code {
+  color: #fbbf24;
+}
+
+.jxr-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
 }
 
 /* ----------------------------------------------------------------- footer */

@@ -1,6 +1,6 @@
 {
   "name": "@jxrstudios/jxr",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "JXR.js — Edge OS Runtime Framework for elite developers",
   "type": "module",
   "license": "MIT",
@@ -19,8 +19,9 @@
     "dist/",
     "bin/",
     "src/",
-    "templates/default/",
+    "templates/",
     "zzz_react_template/",
+    "AGENTS.md",
     "README.md",
     "LICENSE"
   ],

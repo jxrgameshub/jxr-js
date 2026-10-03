@@ -25,6 +25,7 @@ Pro Tip: Just swap in your tsx where the template /src is run ``` jxr dev ``` ze
 - [Deployment](#deployment)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
+- [AI Agent Workflow (AGENTS.md)](#ai-agent-workflow-agentsmd)
 
 ---
 
@@ -76,7 +77,9 @@ npm install @jxrstudios/jxr
 ### 1. Create New Project
 
 ```bash
-jxr init my-app
+jxr init my-app                    # interactive template picker
+jxr init my-app --template=dashboard
+jxr init --list                    # show every template
 cd my-app
 npm install
 jxr dev
@@ -88,6 +91,7 @@ jxr dev
 jxr dev              # Start on default port 3000
 jxr dev --port=3001  # Custom port
 jxr dev --no-hmr     # Disable HMR
+jxr dev --no-overlay # Disable the dev-only template overlay
 ```
 
 ### 3. Production Build & Serve
@@ -103,19 +107,36 @@ jxr serve            # Serve ./dist locally
 
 ### `jxr init [project-name]`
 
-Create a new JXR project. Defaults to `my-jxr-app` when no name is given.
+Create a new JXR project from any official template. Defaults to `my-jxr-app`
+when no name is given.
 
 **Safety:** Never overwrites existing files. Shows a detailed error when the target directory contains files.
 
 ```bash
-jxr init my-app
-cd my-app
-pnpm install   # or: npm install
+jxr init my-app                       # prompts you to pick a template
+jxr init my-app --template=minimal    # non-interactive
+jxr init my-app --yes                 # skip the picker (uses default)
+jxr init --list                       # list the catalog
 ```
 
-The scaffold is self-contained and needs no configuration: `src/App.tsx`,
-`src/main.tsx`, `src/styles.css`, `tsconfig.json`, and a `pnpm-workspace.yaml`
-(which keeps `pnpm install` scoped to your project).
+| Option | Description |
+|--------|-------------|
+| `--template=<id>` | Scaffold a specific template (see `jxr init --list`) |
+| `--list` | Print every available template and exit |
+| `--yes`, `-y` | Skip the interactive picker and use `default` |
+
+The scaffold is self-contained and needs no configuration: `src/`, `tsconfig.json`,
+styles, and (for most templates) a `pnpm-workspace.yaml` which keeps
+`pnpm install` scoped to your project. The chosen template's own dependencies are
+merged into the generated `package.json`, pinned to the installed framework version.
+
+**Templates:** `default` (styled starter + Radix command palette), `minimal`,
+`dashboard`, `crypto-notes`, `multi-page`, `cloudflare-worker`, `typescript`,
+`javascript`, `jsx`, `tsx`, and `react-native`.
+
+Each scaffold also drops an [`AGENTS.md`](./AGENTS.md) working manual into the
+project — the 3-pass QC / zero-hallucination skill that keeps humans and AI coding
+tools grounded in the real JXR data-flow.
 
 ### `jxr dev`
 
@@ -135,6 +156,12 @@ Options:
 - Import map resolution for bare imports (`react`, `react-dom/client`, `wouter`, …)
 - File watching with debounced HMR over Server-Sent Events
 - CSS injected into the document (no stylesheet build step)
+- **Dev template overlay** — a floating gear button (or press `H`) opens a
+  command palette that lists the official templates served live from
+  `GET /__jxr/templates`. Choosing one shows a permanent-choice confirmation and
+  then drops it into `src/` via `POST /__jxr/apply-template` (your current `src/`
+  is backed up to `.jxr/backup-<timestamp>/` first). The overlay is injected by
+  the dev server only and never appears in a `jxr build` output.
 
 ### `jxr build`
 
@@ -710,9 +737,15 @@ jxr/
 │   ├── web-crypto.ts
 │   └── worker-pool.ts
 ├── bin/
-│   └── jxr.js               # CLI entry
-├── templates/
-│   └── default/             # Self-contained starter (App, styles, tsconfig)
+│   └── jxr.js               # CLI entry (init/dev/build/serve/deploy + template picker)
+├── templates/               # Official starter catalog (see templates/README.md)
+│   ├── default/             # Self-contained starter (App, styles, tsconfig)
+│   ├── minimal/             # Single-file React app
+│   ├── dashboard/           # Multi-panel dashboard
+│   ├── multi-page/          # wouter-based routing
+│   ├── cloudflare-worker/   # Worker deployment target
+│   └── ...                  # language variants (ts/js/jsx/tsx) + react-native
+├── AGENTS.md                # 3-pass QC / zero-hallucination AI workflow skill
 ├── zzz_react_template/      # Legacy template (kept for reference)
 └── tests/
 ```
@@ -726,6 +759,27 @@ jxr/
 5. Commit: `git commit -m 'Add amazing feature'`
 6. Push: `git push origin feature/amazing-feature`
 7. Open Pull Request
+
+---
+
+## AI Agent Workflow (AGENTS.md)
+
+JXR.js ships an [`AGENTS.md`](./AGENTS.md) operating manual so any IDE-integrated or
+standalone AI coding tool (Claude Code, Cursor, Copilot, Codex, Windsurf, Roo, …) can work
+inside the framework without guessing. `jxr init` copies it into every new project.
+
+The manual enforces two non-negotiable rules:
+
+1. **3-pass QC** — every change is planned (recon), designed (contract), then executed and
+   verified with real evidence (build output, endpoint responses, transform counts). No task
+   is "done" until the third pass produces observed proof.
+2. **Zero hallucination** — agents must state only what they have verified, cite the exact
+   file/line or command that proves it, and express the framework's single-source-of-truth
+   data flow (import map, template registry, dev server, build pipeline) with full clarity.
+   When something is unknown, the agent says so rather than inventing an API.
+
+Point your AI tool at `AGENTS.md` (most tools auto-discover it at the repo root) to inherit
+the workflow, change playbooks, and verification recipes.
 
 ---
 

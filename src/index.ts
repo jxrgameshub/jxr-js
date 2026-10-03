@@ -52,6 +52,16 @@ export {
   buildImportMap,
 } from './import-map.ts';
 
+// Official template catalog (single source of truth for CLI + dev overlay)
+export {
+  JXR_TEMPLATES,
+  getTemplate,
+  listTemplateIds,
+  listPreviewableTemplates,
+  isValidTemplateId,
+} from './template-registry.ts';
+export type { JXRTemplateMeta, TemplateKind } from './template-registry.ts';
+
 export { JXRRuntime, jxrRuntime } from './runtime.ts';
 export type { JXRRuntimeConfig, JXRRuntimeMetrics } from './runtime.ts';
 

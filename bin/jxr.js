@@ -5,6 +5,9 @@ import {
   IMPORT_MAP,
   isBareSpecifier,
   mapToImportMapKey,
+  JXR_TEMPLATES,
+  getTemplate,
+  isValidTemplateId,
 } from "../dist/index.js";
 
 import { mkdir, writeFile, cp, readdir, readFile, stat } from "fs/promises";
@@ -66,6 +69,48 @@ function assertJxrProject() {
   process.exit(1);
 }
 
+/** Print the official template catalog (shared with the dev overlay). */
+function printTemplateList() {
+  console.log("Available templates:\n");
+  for (const t of JXR_TEMPLATES) {
+    const flag = t.kind === "native" || t.kind === "vanilla" ? `  [${t.kind}]` : "";
+    console.log(`  ${t.id.padEnd(18)} ${t.name}${flag}`);
+    console.log(`  ${" ".repeat(18)} ${t.description}`);
+  }
+  console.log("");
+  console.log("Use one with:  jxr init my-app --template=<id>");
+}
+
+/**
+ * Interactive template picker. Returns a template id, or null when the
+ * environment is non-interactive / the user pressed enter for the default.
+ */
+async function pickTemplate() {
+  const readline = await import("readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q) => new Promise((resolve) => rl.question(q, resolve));
+  try {
+    console.log("\nSelect a template:\n");
+    JXR_TEMPLATES.forEach((t, i) => {
+      const flag = t.kind === "native" || t.kind === "vanilla" ? ` [${t.kind}]` : "";
+      console.log(`  ${String(i + 1).padStart(2)}. ${t.name} (${t.id})${flag}`);
+      console.log(`      ${t.description}`);
+    });
+    console.log("");
+    const answer = (await ask(`Template [1-${JXR_TEMPLATES.length}] or id (default: default): `)).trim();
+    if (!answer) return "default";
+    if (isValidTemplateId(answer)) return answer;
+    const index = parseInt(answer, 10);
+    if (!Number.isNaN(index) && index >= 1 && index <= JXR_TEMPLATES.length) {
+      return JXR_TEMPLATES[index - 1].id;
+    }
+    console.error(`❌ Unknown template "${answer}". Run 'jxr init --list' to see options.`);
+    return null;
+  } finally {
+    rl.close();
+  }
+}
+
 function printUsage(version) {
   console.log(`JXR.js v${version} — Edge OS Runtime Framework
 
@@ -78,9 +123,15 @@ Usage:
   jxr help                         Show this help
   jxr version                      Print the installed version
 
+Init options:
+  --template=<id>                  Scaffold a specific template (default: default)
+  --list                           List all available templates
+  --yes, -y                        Skip the interactive template picker
+
 Dev options:
   --port=<number>                  Port for the dev server (default: 3000)
   --no-hmr                         Disable hot module replacement
+  --no-overlay                     Disable the dev-only template overlay
 
 Build options:
   --platform=<target>              web | node | cloudflare-worker (default: web)
@@ -107,8 +158,37 @@ if (command === "help" || command === "--help" || command === "-h") {
   process.exit(0);
 } else if (command === "init") {
   // Init command - create new project
-  const projectName = args[1] || "my-jxr-app";
+  if (args.includes("--list")) {
+    printTemplateList();
+    process.exit(0);
+  }
+
+  const positionals = args.slice(1).filter((a) => !a.startsWith("-"));
+  const projectName = positionals[0] || "my-jxr-app";
   const projectDir = path.resolve(process.cwd(), projectName);
+  const noPrompt = args.includes("--yes") || args.includes("-y");
+
+  // Resolve the template: --template=<id> | --template <id> | interactive | default
+  let templateId = args.find((a) => a.startsWith("--template="))?.split("=")[1];
+  if (!templateId) {
+    const idx = args.indexOf("--template");
+    if (idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith("-")) {
+      templateId = args[idx + 1];
+    }
+  }
+  if (!templateId && !noPrompt && process.stdin.isTTY) {
+    templateId = await pickTemplate();
+    if (!templateId) process.exit(1);
+  }
+  if (!templateId) templateId = "default";
+
+  if (!isValidTemplateId(templateId)) {
+    console.error(`❌ Unknown template "${templateId}".`);
+    console.error("");
+    printTemplateList();
+    process.exit(1);
+  }
+  const template = getTemplate(templateId);
 
   // Safety check: never overwrite existing files
   if (existsSync(projectDir)) {
@@ -135,16 +215,28 @@ if (command === "help" || command === "--help" || command === "-h") {
   }
 
   console.log(`🚀 Creating new JXR project: ${projectName}`);
+  console.log(`📦 Template: ${template ? template.name : templateId} (${templateId})`);
 
   try {
     // Create directories
     await mkdir(projectDir, { recursive: true });
 
-    // Copy the default template (self-contained: App/main, styles, tsconfig, index.html)
-    const templateDir = path.join(__dirname, "..", "templates", "default");
+    // Copy the chosen template (self-contained: src/, styles, tsconfig, index.html)
+    const templateDir = path.join(__dirname, "..", "templates", templateId);
     await cp(templateDir, projectDir, { recursive: true });
 
-    // Rewrite the template package.json with the project's real name + current version
+    // Merge the template's own dependencies (e.g. wouter for multi-page) on top
+    // of the framework baseline, then rewrite package.json with the real name +
+    // the currently-installed framework version.
+    let templatePkg = {};
+    try {
+      templatePkg = JSON.parse(
+        await readFile(path.join(templateDir, "package.json"), "utf-8")
+      );
+    } catch {
+      // template has no package.json — baseline only
+    }
+
     const version = await getFrameworkVersion();
     const packageJson = {
       name: projectName,
@@ -160,17 +252,34 @@ if (command === "help" || command === "--help" || command === "-h") {
         "@jxrstudios/jxr": `^${version}`,
         react: "^19.2.4",
         "react-dom": "^19.2.4",
+        ...(templatePkg.dependencies || {}),
       },
       devDependencies: {
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
         typescript: "^5.6.0",
+        ...(templatePkg.devDependencies || {}),
       },
     };
+    // Always pin the framework to the installed version, even if the template
+    // shipped a stale range.
+    packageJson.dependencies["@jxrstudios/jxr"] = `^${version}`;
+
     await writeFile(
       path.join(projectDir, "package.json"),
       JSON.stringify(packageJson, null, 2) + "\n"
     );
+
+    // Drop the JXR working manual (3-pass QC / zero-hallucination skill) into
+    // every project so any human or AI tool has the same ground rules.
+    try {
+      await cp(
+        path.join(__dirname, "..", "AGENTS.md"),
+        path.join(projectDir, "AGENTS.md")
+      );
+    } catch {
+      // AGENTS.md is optional; never fail init because of it.
+    }
 
     console.log(`✅ Project created: ${projectDir}`);
     console.log("");
@@ -178,6 +287,8 @@ if (command === "help" || command === "--help" || command === "-h") {
     console.log(`  cd ${projectName}`);
     console.log("  pnpm install   # or: npm install");
     console.log("  jxr dev");
+    console.log("");
+    console.log("Tip: switch templates any time from the dev overlay gear (press H).");
 
   } catch (err) {
     console.error("❌ Failed to create project:", err.message);
@@ -511,11 +622,12 @@ if (command === "help" || command === "--help" || command === "-h") {
   // Dev server (default)
   const port = parseInt(process.env.PORT || args.find((a, i) => args[i - 1] === "--port" || a.startsWith("--port="))?.split("=")[1] || "3000");
   const hmr = !args.includes("--no-hmr");
+  const overlay = !args.includes("--no-overlay");
 
   // Refuse to start when there is no JXR project in the current directory.
   if (!args.includes("--allow-empty")) assertJxrProject();
 
-  const server = new JXRServerManager({ port, enableHMR: hmr });
+  const server = new JXRServerManager({ port, enableHMR: hmr, overlay });
 
   await server.initialize();
   await server.start();
