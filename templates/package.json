@@ -4,11 +4,17 @@
   "version": "1.0.0",
   "description": "Official template showcase for @jxrstudios/jxr",
   "workspaces": [
+    "default",
+    "minimal",
     "typescript",
     "javascript",
     "jsx",
     "tsx",
-    "react-native"
+    "react-native",
+    "dashboard",
+    "crypto-notes",
+    "multi-page",
+    "cloudflare-worker"
   ],
   "scripts": {
     "validate": "./scripts/validate-all.sh"

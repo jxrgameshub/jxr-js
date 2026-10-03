@@ -1,0 +1,9 @@
+# Pin the pnpm workspace root to this repository.
+#
+# Without this file, pnpm walks up the directory tree looking for a workspace
+# root and can adopt an unrelated `pnpm-workspace.yaml` (for example one in your
+# home directory). When that happens `pnpm install` silently installs to the
+# wrong place and this project ends up with no `node_modules`.
+#
+# Explicitly declaring the root here keeps `pnpm install` scoped to this repo.
+packages: []

@@ -1,25 +1,107 @@
 #!/usr/bin/env node
 import { JXRServerManager, JXRDeployer } from "../dist/index.js";
 
-import { mkdir, writeFile, cp, readdir } from "fs/promises";
-import { existsSync } from "fs";
+import { mkdir, writeFile, cp, readdir, readFile, stat } from "fs/promises";
+import { existsSync, createReadStream } from "fs";
 import path from "path";
+import http from "http";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const command = args[0] || "dev";
 
-if (command === "init") {
+/** Resolve the framework version from the nearest package.json (published install or repo). */
+async function getFrameworkVersion() {
+  for (const candidate of [
+    path.join(__dirname, "..", "package.json"),
+    path.join(__dirname, "..", "..", "package.json"),
+  ]) {
+    try {
+      const pkg = JSON.parse(await readFile(candidate, "utf-8"));
+      if (pkg?.version) return pkg.version;
+    } catch {
+      // keep looking
+    }
+  }
+  return "0.0.0";
+}
+
+/**
+ * The single source of truth for the browser import map.
+ * Dev server and production build must agree, otherwise a project that runs
+ * under `jxr dev` would fail under `jxr build`.
+ */
+const IMPORT_MAP = {
+  react: "https://esm.sh/react@19.2.4",
+  "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+  "react/jsx-dev-runtime": "https://esm.sh/react@19.2.4/jsx-dev-runtime",
+  "react-dom": "https://esm.sh/react-dom@19.2.4?external=react",
+  "react-dom/client": "https://esm.sh/react-dom@19.2.4/client?external=react",
+  wouter: "https://esm.sh/wouter@3.6.0?external=react",
+  "lucide-react": "https://esm.sh/lucide-react@0.483.0?external=react",
+};
+
+/** Bare specifier roots that should be left external (resolved by the browser import map). */
+const IMPORT_MAP_KEYS = Object.keys(IMPORT_MAP).sort((a, b) => b.length - a.length);
+
+function isBareSpecifier(spec) {
+  return !spec.startsWith(".") && !spec.startsWith("/") && !spec.startsWith("@/") && !spec.startsWith("http");
+}
+
+function mapToImportMapKey(spec) {
+  return IMPORT_MAP_KEYS.find((key) => spec === key || spec.startsWith(key + "/"));
+}
+
+function printUsage(version) {
+  console.log(`JXR.js v${version} — Edge OS Runtime Framework
+
+Usage:
+  jxr init [project-name]          Create a new project (default: my-jxr-app)
+  jxr dev [--port=3000]            Start dev server (zero-build, HMR)
+  jxr build [--platform=web]       Production build
+  jxr serve [--port=3000]          Serve the production build from ./dist
+  jxr deploy [--target=auto]       Deploy to production
+  jxr help                         Show this help
+  jxr version                      Print the installed version
+
+Dev options:
+  --port=<number>                  Port for the dev server (default: 3000)
+  --no-hmr                         Disable hot module replacement
+
+Build options:
+  --platform=<target>              web | node | cloudflare-worker (default: web)
+  --out-dir=<path>                 Output directory (default: dist)
+  --analyze                        Print a bundle-size analysis
+  --no-minify                      Disable minification
+
+Deploy targets:
+  --target=cloudflare              Cloudflare Pages
+  --target=deno                    Deno Deploy
+  --target=node                    Node.js server
+  --target=auto                    Auto-detect (default)
+
+Cloudflare Pages:
+  Auto-detected when CF_PAGES env var is set
+  URL: https://<project>.app.jxrstudios.online`);
+}
+
+if (command === "help" || command === "--help" || command === "-h") {
+  printUsage(await getFrameworkVersion());
+  process.exit(0);
+} else if (command === "version" || command === "--version" || command === "-v") {
+  console.log(await getFrameworkVersion());
+  process.exit(0);
+} else if (command === "init") {
   // Init command - create new project
   const projectName = args[1] || "my-jxr-app";
   const projectDir = path.resolve(process.cwd(), projectName);
-  
+
   // Safety check: never overwrite existing files
   if (existsSync(projectDir)) {
     const fs = await import("fs");
     const existingFiles = fs.readdirSync(projectDir);
-    
+
     if (existingFiles.length > 0) {
       console.error(`❌ Directory "${projectName}" already exists and contains files:`);
       existingFiles.slice(0, 10).forEach(f => console.error(`   - ${f}`));
@@ -34,93 +116,91 @@ if (command === "init") {
       console.error(`  3. Manually backup and clear the directory first`);
       process.exit(1);
     }
-    
+
     // Directory exists but is empty - safe to proceed
     console.log(`📁 Using existing empty directory: ${projectName}`);
   }
-  
+
   console.log(`🚀 Creating new JXR project: ${projectName}`);
-  
+
   try {
     // Create directories
     await mkdir(projectDir, { recursive: true });
-    await mkdir(path.join(projectDir, "src"), { recursive: true });
-    
-    // Create package.json
+
+    // Copy the default template (self-contained: App/main, styles, tsconfig, index.html)
+    const templateDir = path.join(__dirname, "..", "templates", "default");
+    await cp(templateDir, projectDir, { recursive: true });
+
+    // Rewrite the template package.json with the project's real name + current version
+    const version = await getFrameworkVersion();
     const packageJson = {
       name: projectName,
       version: "1.0.0",
+      private: true,
       type: "module",
       scripts: {
         dev: "jxr dev",
-        deploy: "jxr deploy"
+        build: "jxr build",
+        deploy: "jxr deploy",
       },
       dependencies: {
-        "@jxrstudios/jxr": "^1.0.5"
+        "@jxrstudios/jxr": `^${version}`,
+        react: "^19.2.4",
+        "react-dom": "^19.2.4",
       },
       devDependencies: {
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
-        "typescript": "^5.5.0"
-      }
+        typescript: "^5.6.0",
+      },
     };
     await writeFile(
       path.join(projectDir, "package.json"),
-      JSON.stringify(packageJson, null, 2)
+      JSON.stringify(packageJson, null, 2) + "\n"
     );
-    
-    // Copy template from zzz_react_template
-    const templateDir = path.join(__dirname, "..", "zzz_react_template");
-    const files = ["App.tsx", "index.css", "main.tsx"];
-    for (const file of files) {
-      await cp(
-        path.join(templateDir, file),
-        path.join(projectDir, "src", file)
-      );
-    }
-    
-    // Copy tsconfig.json
-    await cp(
-      path.join(templateDir, "tsconfig.json"),
-      path.join(projectDir, "tsconfig.json")
-    );
-    
+
     console.log(`✅ Project created: ${projectDir}`);
     console.log("");
     console.log("Next steps:");
     console.log(`  cd ${projectName}`);
-    console.log("  npm install");
+    console.log("  pnpm install   # or: npm install");
     console.log("  jxr dev");
-    
+
   } catch (err) {
     console.error("❌ Failed to create project:", err.message);
     process.exit(1);
   }
-  
+
 } else if (command === "build") {
   // Build command - production-optimized build
   const platform = args.find((a) => a.startsWith("--platform="))?.split("=")[1] || "web";
   const analyze = args.includes("--analyze");
   const noMinify = args.includes("--no-minify");
   const outDir = args.find((a) => a.startsWith("--out-dir="))?.split("=")[1] || "dist";
-  
+
   console.log(`🔨 Building for ${platform}...`);
-  
+
   try {
     const esbuild = await import("esbuild");
     const fs = await import("fs");
     const path = await import("path");
     const crypto = await import("crypto");
-    
+
     // Ensure output directory exists
     await mkdir(outDir, { recursive: true });
     await mkdir(path.join(outDir, "assets"), { recursive: true });
-    
+
     // Find entry point
-    const entryFile = fs.existsSync("src/main.tsx") ? "src/main.tsx" : 
-                      fs.existsSync("src/main.ts") ? "src/main.ts" : 
+    const entryFile = fs.existsSync("src/main.tsx") ? "src/main.tsx" :
+                      fs.existsSync("src/main.ts") ? "src/main.ts" :
+                      fs.existsSync("src/main.jsx") ? "src/main.jsx" :
                       fs.existsSync("src/App.tsx") ? "src/App.tsx" : "src/index.tsx";
-    
+
+    // Bare imports that the JXR runtime resolves at runtime through the browser
+    // import map (e.g. "react" -> https://esm.sh/react@19). These must be left
+    // external so the production HTML can serve them the same way `jxr dev` does.
+    const externalBare = new Set();
+
     // Build configuration
     const buildConfig = {
       entryPoints: [entryFile],
@@ -159,12 +239,29 @@ if (command === "init") {
         ".svg": "file",
       },
     };
-    
-    // Run build
-    const result = await esbuild.build(buildConfig);
-    
+
+    // Rewrite bare imports that are covered by the import map to their CDN URL
+    // and mark them external (browser resolves them, same as dev).
+    const importMapToCdn = {
+      name: "jxr-import-map",
+      setup(build) {
+        build.onResolve({ filter: /.*/ }, (a) => {
+          if (a.kind === "entry-point") return null;
+          const spec = a.path;
+          if (!isBareSpecifier(spec)) return null;
+          const key = mapToImportMapKey(spec);
+          if (!key) return null;
+          externalBare.add(key);
+          const suffix = spec.slice(key.length);
+          return { path: IMPORT_MAP[key] + suffix, external: true };
+        });
+      },
+    };
+
+    const result = await esbuild.build({ ...buildConfig, plugins: [importMapToCdn] });
+
     console.log(`✅ Build complete: ${outDir}/`);
-    
+
     // Analyze bundle if requested
     if (analyze && result.metafile) {
       console.log("\n📊 Bundle Analysis:");
@@ -175,24 +272,31 @@ if (command === "init") {
         console.log(`   ${file}: ${sizeKB} KB`);
       });
     }
-    
+
     // Find main entry output (exclude source maps)
-    const mainOutput = Object.keys(result.metafile?.outputs || {}).find(k => 
+    const mainOutput = Object.keys(result.metafile?.outputs || {}).find(k =>
       (k.includes("main-") || k.includes("index-")) && k.endsWith(".js")
     );
-    const vendorOutput = Object.keys(result.metafile?.outputs || {}).find(k => 
+    const vendorOutput = Object.keys(result.metafile?.outputs || {}).find(k =>
       k.includes("chunk-") && k.endsWith(".js")
     );
-    
+
     // Copy compiled CSS if available
     if (fs.existsSync("src/index.compiled.css")) {
       fs.copyFileSync("src/index.compiled.css", path.join(outDir, "assets", "index-[hash].css"));
       console.log(`  📄 Copied compiled CSS`);
     }
-    
+
     // Find CSS output
     const cssOutput = Object.keys(result.metafile?.outputs || {}).find(k => k.endsWith(".css"));
-    
+
+    // Emit the import map so external react/etc. resolve in the production build
+    const usedImports = {};
+    for (const key of externalBare) usedImports[key] = IMPORT_MAP[key];
+    const importMapTag = Object.keys(usedImports).length
+      ? `<script type="importmap">\n  ${JSON.stringify({ imports: usedImports })}\n  </script>`
+      : "";
+
     // Generate index.html with proper CSS and JS references
     const indexHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -201,13 +305,14 @@ if (command === "init") {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JXR.js — Edge OS Runtime Framework</title>
   <meta name="description" content="JXR.js is the next-generation edge runtime framework for React Native and React. MoQ transport, Web Crypto, Worker pools.">
-  
+
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
+
   ${cssOutput ? `<link rel="stylesheet" href="${cssOutput.replace(outDir, "").replace(/^\//, "")}">` : ""}
+  ${importMapTag}
 </head>
 <body>
   <div id="root"></div>
@@ -215,9 +320,9 @@ if (command === "init") {
   <script type="module" src="${mainOutput ? mainOutput.replace(outDir, "").replace(/^\//, "") : "assets/index.js"}"></script>
 </body>
 </html>`;
-    
+
     await writeFile(path.join(outDir, "index.html"), indexHtml);
-    
+
     // Generate crypto-signed manifest
     const manifest = {
       version: "1.0.0",
@@ -229,53 +334,136 @@ if (command === "init") {
       },
       files: Object.keys(result.metafile?.outputs || {}).map(k => path.basename(k)),
     };
-    
+
     // Sign manifest with ECDSA P-256
     const manifestJson = JSON.stringify(manifest, null, 2);
     const { privateKey, publicKey } = crypto.generateKeyPairSync("ec", {
       namedCurve: "prime256v1",
     });
     const signature = crypto.sign("sha256", Buffer.from(manifestJson), privateKey);
-    
+
     const signedManifest = {
       ...manifest,
       signature: signature.toString("base64"),
       algorithm: "ECDSA-P256",
       publicKey: publicKey.export({ type: "spki", format: "pem" }),
     };
-    
+
     await writeFile(
       path.join(outDir, "jxr-manifest.json"),
       JSON.stringify(signedManifest, null, 2)
     );
-    
+
     console.log(`✅ Manifest: ${outDir}/jxr-manifest.json`);
     console.log(`   Signed with ECDSA-P256`);
-    
+
     // Show output files
     console.log("\n📁 Build outputs:");
     const files = await readdir(outDir, { recursive: true });
     files.forEach(f => console.log(`   ${f}`));
-    
+
   } catch (err) {
     console.error("❌ Build failed:", err.message);
     process.exit(1);
   }
-  
+
+} else if (command === "serve") {
+  // Serve command - static file server for the production build
+  const port = parseInt(process.env.PORT || args.find((a) => a.startsWith("--port="))?.split("=")[1] || "3000", 10);
+  const dir = args.find((a) => a.startsWith("--dir="))?.split("=")[1] || "dist";
+  const root = path.resolve(process.cwd(), dir);
+
+  if (!existsSync(root) || !existsSync(path.join(root, "index.html"))) {
+    console.error(`❌ No production build found in "${dir}".`);
+    console.error("   Run 'jxr build' first, or pass --dir=<path>.");
+    process.exit(1);
+  }
+
+  const types = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".mjs": "application/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".map": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".txt": "text/plain; charset=utf-8",
+  };
+
+  const server = http.createServer(async (req, res) => {
+    try {
+      const url = new URL(req.url || "/", `http://localhost:${port}`);
+      let pathname = decodeURIComponent(url.pathname);
+      if (pathname === "/") pathname = "/index.html";
+
+      // Prevent path traversal
+      const target = path.normalize(path.join(root, pathname));
+      if (!target.startsWith(root)) {
+        res.writeHead(403).end("Forbidden");
+        return;
+      }
+
+      let filePath = target;
+      let info = null;
+      try {
+        info = await stat(filePath);
+      } catch {
+        info = null;
+      }
+
+      // SPA fallback: unknown non-asset paths serve index.html
+      if (!info || info.isDirectory()) {
+        if (!path.extname(pathname)) {
+          filePath = path.join(root, "index.html");
+        } else {
+          res.writeHead(404).end("Not found");
+          return;
+        }
+      }
+
+      const ext = path.extname(filePath).toLowerCase();
+      res.writeHead(200, {
+        "Content-Type": types[ext] || "application/octet-stream",
+        "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable",
+      });
+      createReadStream(filePath).pipe(res);
+    } catch (err) {
+      res.writeHead(500).end(String(err?.message || err));
+    }
+  });
+
+  server.listen(port, () => {
+    console.log(`🚀 Serving ${dir}/ on http://localhost:${port}/`);
+    console.log("   Press Ctrl+C to stop");
+  });
+
+  const shutdown = () => {
+    server.close(() => process.exit(0));
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
 } else if (command === "deploy") {
   // Deploy command with Cloudflare Pages auto-detection
   const target = args.find((a) => a.startsWith("--target="))?.split("=")[1] || "auto";
   const env = args.find((a) => a.startsWith("--env="))?.split("=")[1] || "production";
   const projectPath = args.find((a) => !a.startsWith("--")) || ".";
-  
+
   console.log(`🚀 Deploying to ${target === "auto" ? "auto-detected platform" : target}...`);
-  
+
   try {
     // Use JXRDeployer for Cloudflare Pages deployment
     if (target === "cloudflare" || target === "auto") {
       const deployer = new JXRDeployer(process.env.JXR_API_KEY || '', process.env.JXR_PROJECT_ID);
       const result = await deployer.deployToCloudflarePages(projectPath, { environment: env });
-      
+
       if (result.success) {
         console.log("✅ Deployed successfully!");
         console.log(`   URL: ${result.url}`);
@@ -285,26 +473,26 @@ if (command === "init") {
         result.logs.forEach(log => console.error(`   ${log}`));
         process.exit(1);
       }
-      
+
     } else if (target === "deno") {
       console.log("🦕 Deploying to Deno Deploy...");
       console.log("   Run 'deployctl deploy' to deploy to Deno Deploy");
-      
+
     } else if (target === "node") {
       console.log("🟢 Deploying to Node.js server...");
       console.log("   Copy the dist/ folder to your Node.js server");
-      
+
     } else {
       console.error(`❌ Unknown target: ${target}`);
       console.error("   Supported: cloudflare, deno, node, auto");
       process.exit(1);
     }
-    
+
   } catch (err) {
     console.error("❌ Deploy failed:", err.message);
     process.exit(1);
   }
-  
+
 } else if (command === "dev" || !command) {
   // Dev server (default)
   const port = parseInt(process.env.PORT || args.find((a, i) => args[i - 1] === "--port" || a.startsWith("--port="))?.split("=")[1] || "3000");
@@ -327,23 +515,9 @@ if (command === "init") {
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
-  
+
 } else {
-  console.log("Usage:");
-  console.log("  jxr init <project-name>          Create new project");
-  console.log("  jxr dev [--port=3000]            Start dev server");
-  console.log("  jxr build [--platform=web]       Production build");
-  console.log("  jxr serve [--port=3000]          Serve production build");
-  console.log("  jxr deploy [--target=auto]       Deploy to production");
-  console.log("");
-  console.log("Deploy targets:");
-  console.log("  --target=cloudflare              Cloudflare Pages");
-  console.log("  --target=deno                    Deno Deploy");
-  console.log("  --target=node                    Node.js server");
-  console.log("  --target=auto                    Auto-detect (default)");
-  console.log("");
-  console.log("Cloudflare Pages:");
-  console.log("  Auto-detected when CF_PAGES env var is set");
-  console.log("  URL: https://<project>.app.jxrstudios.online");
+  console.error(`Unknown command: ${command}\n`);
+  printUsage(await getFrameworkVersion());
   process.exit(1);
 }

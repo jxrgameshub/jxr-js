@@ -1,0 +1,7 @@
+# Keep pnpm scoped to this project.
+#
+# pnpm walks up the directory tree looking for a workspace root. If a parent
+# directory happens to contain a `pnpm-workspace.yaml`, `pnpm install` can adopt
+# it and install somewhere other than this project — leaving this folder without
+# a `node_modules`. Declaring the root here prevents that.
+packages: []

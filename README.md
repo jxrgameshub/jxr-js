@@ -21,7 +21,6 @@ Pro Tip: Just swap in your tsx where the template /src is run ``` jxr dev ``` ze
 - [CLI Commands](#cli-commands)
 - [Architecture](#architecture)
 - [MCP Server](#mcp-server)
-- [Migration Guide](#migration-guide)
 - [API Reference](#api-reference)
 - [Deployment](#deployment)
 - [Troubleshooting](#troubleshooting)
@@ -83,67 +82,63 @@ npm install
 jxr dev
 ```
 
-### 2. Existing Project Migration
-
-```bash
-# Auto-detect framework and migrate
-jxr migrate --from nextjs
-
-# Dry run to preview changes
-jxr migrate --from vite --dry-run
-```
-
-### 3. Development Server
+### 2. Development Server
 
 ```bash
 jxr dev              # Start on default port 3000
-jxr dev --port 3001  # Custom port
+jxr dev --port=3001  # Custom port
 jxr dev --no-hmr     # Disable HMR
+```
+
+### 3. Production Build & Serve
+
+```bash
+jxr build            # Bundle to ./dist + sign a manifest
+jxr serve            # Serve ./dist locally
 ```
 
 ---
 
 ## CLI Commands
 
-### `jxr init <project-name>`
+### `jxr init [project-name]`
 
-Create a new JXR project with scaffolding.
+Create a new JXR project. Defaults to `my-jxr-app` when no name is given.
 
-**Safety:** Never overwrites existing files. Shows detailed error if directory contains files.
-
-**Templates:**
-- `react-web` — React web application (default)
-- `react-native` — React Native mobile app
-- `expo` — Expo managed workflow
-- `cloudflare` — Cloudflare Workers edge function
+**Safety:** Never overwrites existing files. Shows a detailed error when the target directory contains files.
 
 ```bash
-jxr init my-app --template react-web
+jxr init my-app
+cd my-app
+pnpm install   # or: npm install
 ```
+
+The scaffold is self-contained and needs no configuration: `src/App.tsx`,
+`src/main.tsx`, `src/styles.css`, `tsconfig.json`, and a `pnpm-workspace.yaml`
+(which keeps `pnpm install` scoped to your project).
 
 ### `jxr dev`
 
-Start development server with HMR.
+Start the zero-build development server with HMR.
 
 ```bash
 jxr dev [options]
 
 Options:
-  --port=<number>     Server port (default: 3000)
+  --port=<number>    Server port (default: 3000)
   --no-hmr           Disable hot module replacement
-  --host=<address>   Bind to specific host
 ```
 
 **Features:**
 - Virtual file system with in-memory caching
-- On-demand JSX/TSX transformation
-- Import map resolution for bare imports
-- Web Worker pool for parallel processing
-- MoQ transport for sub-RTT updates
+- On-demand TSX/JSX transformation (Babel)
+- Import map resolution for bare imports (`react`, `react-dom/client`, `wouter`, …)
+- File watching with debounced HMR over Server-Sent Events
+- CSS injected into the document (no stylesheet build step)
 
 ### `jxr build`
 
-Production build with code splitting and crypto signing.
+Production build with hashed assets, code splitting, and a crypto-signed manifest.
 
 ```bash
 jxr build [options]
@@ -157,38 +152,41 @@ Options:
 
 **Output:**
 - `dist/assets/` — Bundled JavaScript and CSS
-- `dist/index.html` — Entry HTML with proper preload tags
-- `dist/jxr-manifest.json` — Crypto-signed manifest
+- `dist/index.html` — Entry HTML with the generated import map
+- `dist/jxr-manifest.json` — ECDSA-P256 signed manifest
 
-### `jxr migrate`
+> Bare imports covered by the JXR import map (`react`, `react/jsx-runtime`,
+> `react-dom/client`, `wouter`, `lucide-react`) are left external and resolved at
+> runtime from `esm.sh`, so a project that runs under `jxr dev` also builds
+> without a local `react` install.
 
-Migrate from existing frameworks with AST-level transformations.
+### `jxr serve`
+
+Serve the production build with a static file server.
 
 ```bash
-jxr migrate [options]
+jxr serve [options]
 
 Options:
-  --from=<framework>  nextjs | vite | bun | cra | expo | remix | nuxt
-  --to=<target>       Target platform (default: react-web)
-  --dry-run           Preview changes without applying
-  --force             Skip confirmation prompts
+  --port=<number>    Server port (default: 3000)
+  --dir=<path>       Directory to serve (default: dist)
 ```
 
-**Supported Frameworks:**
-- Next.js (pages router, app router)
-- Vite (React, Vue, Svelte)
-- Create React App
-- Expo / React Native
-- Remix
-- Nuxt 3
-- Bun
+Serves `./dist` with correct MIME types, immutable caching for hashed assets, and
+SPA fallback routing.
 
-**What gets migrated:**
-- Import rewrites (AST-level)
-- Config file conversion
-- API route transformation
-- Dependency mapping
-- Asset path updates
+### `jxr help` / `jxr version`
+
+```bash
+jxr help       # Print usage and options
+jxr version    # Print the installed framework version
+```
+
+### `jxr migrate` — not yet available
+
+Migration from existing frameworks is on the roadmap but is **not implemented in
+this release**. `jxr migrate` is not a recognized command and will print usage.
+See [Migration Guide](#migration-guide) for the manual path.
 
 ### `jxr deploy`
 
@@ -383,46 +381,31 @@ Agent: I'll initialize the project and set it up for you.
 User: Migrate my Next.js blog to JXR and deploy it
 Agent: I'll migrate your project and deploy it to production.
 
-[Uses jxr_detect_framework, jxr_migrate, jxr_build, jxr_deploy]
+[Uses jxr_detect_framework, jxr_dev, jxr_build, jxr_deploy]
 ```
 
 ---
 
 ## Migration Guide
 
-### From Next.js
+> **Status:** automatic migration is **not implemented yet**. The `jxr migrate`
+> command described in earlier drafts does not exist in this release.
 
-```bash
-jxr migrate --from nextjs
-```
+To adopt JXR with an existing project today:
 
-**Changes:**
-- `pages/` → `src/pages/` (optional)
-- `next.config.js` → `jxr.config.ts`
-- `getServerSideProps` → Edge functions
-- API routes preserved with minor syntax updates
+1. Create a JXR project and copy your sources in:
 
-### From Vite
+   ```bash
+   jxr init my-app
+   cp -r <your-project>/src/* my-app/src/
+   ```
 
-```bash
-jxr migrate --from vite
-```
+2. Ensure every import is either relative (`./Component`), covered by the import
+   map (`react`, `react-dom/client`, …), or a file that actually exists under `src/`.
+3. Run `jxr dev`.
 
-**Changes:**
-- `vite.config.ts` → `jxr.config.ts`
-- Import map replaces `resolve.alias`
-- Plugin system has different API
-
-### From Create React App
-
-```bash
-jxr migrate --from cra
-```
-
-**Changes:**
-- Zero-config philosophy maintained
-- Service worker handling updated
-- Modern JSX transform (no React import needed)
+Framework-specific codemods (Next.js, Vite, CRA, Expo, Remix, Nuxt) are planned.
+There is no `--from`, `--to`, `--dry-run`, or `--force` flag in this release.
 
 ---
 
@@ -604,20 +587,16 @@ jxr dev --no-hmr  # Disable HMR as workaround
 
 ### Build fails with "Cannot resolve"
 
-Ensure all imports are either:
-1. Relative paths (`./Component`)
-2. Mapped in import map
-3. Marked as external in jxr.config.ts
+Imports must be one of:
 
-### Migration fails
+1. A relative path (`./Component`)
+2. Covered by the import map — `react`, `react/jsx-runtime`, `react-dom/client`,
+   `wouter`, `lucide-react`
+3. Installed locally in `node_modules` (any other bare package)
 
-```bash
-# Preview changes first
-jxr migrate --from nextjs --dry-run
-
-# Force migration (skip prompts)
-jxr migrate --from nextjs --force
-```
+For a bare package that is neither in the import map nor installed locally, the
+build fails and names the specifier. Install it (`pnpm add <pkg>`) or add it to
+the import map.
 
 ---
 
