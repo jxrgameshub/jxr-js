@@ -47,8 +47,14 @@ interface TemplateFile {
   content: string;
 }
 
-/** A catalog entry returned by `GET /__jxr/templates`. `files` is only
- * included when the template can be live-previewed (keeps payloads small). */
+/**
+ * A catalog entry returned by `GET /__jxr/templates`.
+ *
+ * Fields live at the top level (consumed by the Template Explorer) AND are
+ * mirrored under `meta` for backwards compatibility with apps scaffolded
+ * against the 1.6 layout (`res.templates[].meta`). Every entry carries its
+ * source files so the explorer can transpile live previews and show source.
+ */
 interface TemplateCatalogEntry {
   id: string;
   name: string;
@@ -60,6 +66,8 @@ interface TemplateCatalogEntry {
   previewNote?: string;
   entry: string;
   files: TemplateFile[];
+  /** Backwards-compatible mirror of the metadata fields above. */
+  meta: JXRTemplateMeta;
 }
 
 /** Escape a string for safe embedding inside a `"…"` JS string literal. */
@@ -224,6 +232,9 @@ export class JXRServerManager {
         previewNote: meta.previewNote,
         entry: meta.entry,
         files,
+        // Backwards-compatible mirror so apps scaffolded against the 1.6
+        // `res.templates[].meta` shape keep working after the 1.7 upgrade.
+        meta: { ...meta },
       });
     }
     this.templateCache = catalog;
@@ -287,8 +298,17 @@ export class JXRServerManager {
     // `entry` is stored relative to src/ (e.g. "src/main.tsx"); strip the src/
     // prefix so it can be appended to the preview base.
     const entryPath = meta.entry.replace(/^src\//, "");
-    const stylesheet = files.some((f) => f.path === "src/styles.css")
-      ? `\n  <link rel="stylesheet" href="${previewBase}/src/styles.css">`
+    // Inline any template stylesheet directly into the preview document. This
+    // guarantees the preview is styled the instant the (async) module graph
+    // boots, instead of relying on a separate CSS request that can arrive
+    // after first paint. `</style>` is escaped defensively.
+    // NOTE: catalog file paths are relative to the template's src/, so the
+    // stylesheet is "styles.css" (accept a legacy "src/" prefix too).
+    const styleFile = files.find(
+      (f) => f.path === "styles.css" || f.path === "src/styles.css"
+    );
+    const inlineStyles = styleFile
+      ? `\n  <style>${styleFile.content.replace(/<\/style>/gi, "<\\/style>")}</style>`
       : "";
     return `<!DOCTYPE html>
 <html lang="en">
@@ -296,13 +316,14 @@ export class JXRServerManager {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JXR preview — ${meta.name}</title>
-  <style>html,body{margin:0;min-height:100%}#root{min-height:100vh}</style>${stylesheet}
+  <style>html,body{margin:0;min-height:100%}#root{min-height:100vh}body{background:#0a0a0a}</style>${inlineStyles}
   <script type="importmap">
     ${JSON.stringify(importMap)}
   </script>
 </head>
 <body>
   <div id="root"></div>
+  <noscript>This live preview requires JavaScript.</noscript>
   <script type="module" src="${previewBase}/src/${entryPath}"></script>
 </body>
 </html>`;

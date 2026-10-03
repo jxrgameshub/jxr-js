@@ -4,11 +4,13 @@
 >
 > MoQ transport · Web Crypto · Worker Pools · MCP Server · React Native + Web
 
-[![npm version](https://badge.fury.io/js/@jxrstudios%2Fjxr.svg)](https://www.npmjs.com/package/@jxrstudios/jxr)
+[![npm version](https://img.shields.io/npm/v/@jxrstudios/jxr.svg?color=orange&label=npm)](https://www.npmjs.com/package/@jxrstudios/jxr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](https://opensource.org/licenses/MIT)
+[![Support: Telegram](https://img.shields.io/badge/Support-Telegram-26A5E4?logo=telegram&logoColor=white)](https://t.me/JGoatzTV)
 
-**Website:** https://jxrstudios.online  
-**Documentation:** https://jxrstudios.online/
+**Website:** https://github.com/jxrgameshub/jxr-js
+**Documentation:** https://github.com/jxrgameshub/jxr-js#readme
+**Support:** Telegram — [@JGoatzTV](https://t.me/JGoatzTV)
 
 ---
 Pro Tip: Just swap in your tsx where the template /src is run ``` jxr dev ``` zero build step needed if it doesnt work update your browser. Enjoy
@@ -26,6 +28,7 @@ Pro Tip: Just swap in your tsx where the template /src is run ``` jxr dev ``` ze
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [AI Agent Workflow (AGENTS.md)](#ai-agent-workflow-agentsmd)
+- [Support](#support)
 
 ---
 
@@ -793,6 +796,19 @@ The manual enforces two non-negotiable rules:
 
 Point your AI tool at `AGENTS.md` (most tools auto-discover it at the repo root) to inherit
 the workflow, change playbooks, and verification recipes.
+
+---
+
+## Support
+
+Need help, found a bug, or want to follow along? Reach out on Telegram:
+
+- **Telegram:** [@JGoatzTV](https://t.me/JGoatzTV)
+- **Issues:** [github.com/jxrgameshub/jxr-js/issues](https://github.com/jxrgameshub/jxr-js/issues)
+
+> The public website is temporarily served from the GitHub repository while the
+> hosted site is being prepared. All source, docs, and release notes live at
+> [github.com/jxrgameshub/jxr-js](https://github.com/jxrgameshub/jxr-js).
 
 ---
 

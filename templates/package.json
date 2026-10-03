@@ -20,6 +20,6 @@
     "validate": "./scripts/validate-all.sh"
   },
   "dependencies": {
-    "@jxrstudios/jxr": "^1.7.0"
+    "@jxrstudios/jxr": "^1.7.1"
   }
 }

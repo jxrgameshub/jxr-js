@@ -1,6 +1,6 @@
 {
   "name": "@jxrstudios/jxr",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "JXR.js — Edge OS Runtime Framework for elite developers",
   "type": "module",
   "license": "MIT",
@@ -41,7 +41,7 @@
     "type": "git",
     "url": "https://github.com/jxrgameshub/jxr-js.git"
   },
-  "homepage": "https://jxrstudios.online",
+  "homepage": "https://github.com/jxrgameshub/jxr-js#readme",
   "bugs": {
     "url": "https://github.com/jxrgameshub/jxr-js/issues"
   },

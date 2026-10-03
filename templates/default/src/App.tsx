@@ -155,9 +155,14 @@ export default function App() {
     setCatalogState('loading');
     fetch('/__jxr/templates')
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-      .then((res: { templates?: Array<{ meta: TemplateMeta }> }) => {
+      .then((res: { templates?: Array<TemplateMeta & { meta?: TemplateMeta }> }) => {
         if (cancelled) return;
-        const list = (res.templates ?? []).map((bundle) => bundle.meta);
+        // The dev server returns catalog entries with the metadata at the top
+        // level (1.7+); older payloads nested it under `.meta`. Accept both and
+        // never let an unexpected shape crash React (which would blank the app).
+        const list = (res.templates ?? [])
+          .map((entry) => entry.meta ?? entry)
+          .filter((entry): entry is TemplateMeta => Boolean(entry && entry.id));
         setCatalog(list);
         setCatalogState('ready');
       })

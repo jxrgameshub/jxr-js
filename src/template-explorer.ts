@@ -138,6 +138,7 @@ export function buildExplorerScript(): string {
       '<div class="foot"><span class="hint">Pick a template to preview it, then Apply.</span>' +
         '<span class="tools">' +
           '<button class="tool" data-tool="docs">Docs</button>' +
+          '<button class="tool" data-tool="support">Support</button>' +
           '<button class="tool" data-tool="install">Copy install</button>' +
           '<button class="tool" data-tool="hide">Hide overlay</button>' +
         '</span></div>';
@@ -148,7 +149,8 @@ export function buildExplorerScript(): string {
     input.value = query;
     input.addEventListener('input', function () { query = input.value; renderStrip(); });
     input.addEventListener('keydown', onInputKey);
-    panel.querySelector('[data-tool="docs"]').addEventListener('click', function () { window.open('https://jxrstudios.online', '_blank'); });
+    panel.querySelector('[data-tool="docs"]').addEventListener('click', function () { window.open('https://github.com/jxrgameshub/jxr-js#readme', '_blank'); });
+    panel.querySelector('[data-tool="support"]').addEventListener('click', function () { window.open('https://t.me/JGoatzTV', '_blank'); });
     panel.querySelector('[data-tool="install"]').addEventListener('click', function () { try { navigator.clipboard.writeText('pnpm add -g @jxrstudios/jxr'); } catch (e) {} });
     panel.querySelector('[data-tool="hide"]').addEventListener('click', function () { host.remove(); });
     renderChips();
@@ -395,7 +397,13 @@ export function buildExplorerScript(): string {
     var typing = /input|textarea/i.test((document.activeElement && document.activeElement.tagName) || '');
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); toggle(); }
     else if (e.key === 'Escape' && scrim.classList.contains('open')) close();
-    else if (!typing && (e.key === 'h' || e.key === 'H') && !scrim.classList.contains('open')) { toggle(); }
+    else if (!typing && (e.key === 'h' || e.key === 'H') && !scrim.classList.contains('open')) {
+      // preventDefault stops the "h" keystroke from also being typed into the
+      // search box we focus on the next line (which would silently filter the
+      // carousel down to only templates containing the letter "h").
+      e.preventDefault();
+      toggle();
+    }
   });
 })();
 </script>`;

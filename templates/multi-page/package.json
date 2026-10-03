@@ -8,7 +8,7 @@
     "deploy": "jxr deploy"
   },
   "dependencies": {
-    "@jxrstudios/jxr": "^1.7.0",
+    "@jxrstudios/jxr": "^1.7.1",
     "wouter": "^3.6.0"
   },
   "devDependencies": {
